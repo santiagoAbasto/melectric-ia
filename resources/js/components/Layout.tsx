@@ -1,20 +1,37 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { BookOpenCheck, Boxes, Cpu, FileText, Inbox, LogOut, Menu, Search, X } from 'lucide-react';
+import { BookOpenCheck, Boxes, Cpu, FileText, LogOut, Menu, MessageCircle, Search, SearchCode, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
-import type { SharedProps } from '@/types';
+import type { Permission, SharedProps } from '@/types';
 import { CommandPalette } from './CommandPalette';
 import { cx } from './ui';
 
-const NAV = [
-    { href: '/inbox', label: 'Bandeja', icon: Inbox, can: 'conversations.view' },
-    { href: '/products', label: 'Productos', icon: Boxes, can: 'catalog.view' },
-    { href: '/documents', label: 'Documentos', icon: FileText, can: 'catalog.view' },
-    { href: '/knowledge', label: 'Conocimiento', icon: BookOpenCheck, can: 'catalog.view' },
-    { href: '/ai', label: 'Centro de IA', icon: Cpu, can: 'ai.evals.run' },
-] as const;
+interface NavItem { href: string; label: string; icon: typeof MessageCircle; can: Permission; badge?: 'unread' }
 
-export function Layout({ title, children, actions, fullHeight = false }: { title: string; children: ReactNode; actions?: ReactNode; fullHeight?: boolean }) {
-    const { auth, ai, flash, url } = usePage<SharedProps & { url?: string }>().props as SharedProps & { url?: string };
+const SECTIONS: { title: string; items: NavItem[] }[] = [
+    { title: 'Atención', items: [{ href: '/inbox', label: 'Chats', icon: MessageCircle, can: 'conversations.view', badge: 'unread' }] },
+    {
+        title: 'Catálogo y conocimiento',
+        items: [
+            { href: '/products', label: 'Productos', icon: Boxes, can: 'catalog.view' },
+            { href: '/documents', label: 'Documentos', icon: FileText, can: 'catalog.view' },
+            { href: '/knowledge', label: 'Conocimiento', icon: BookOpenCheck, can: 'catalog.view' },
+        ],
+    },
+    {
+        title: 'Inteligencia',
+        items: [
+            { href: '/ai', label: 'Centro de IA', icon: Cpu, can: 'ai.evals.run' },
+            { href: '/search/debug', label: 'Depurador de búsqueda', icon: SearchCode, can: 'catalog.view' },
+        ],
+    },
+];
+
+/**
+ * Estructura de todas las pantallas: barra lateral abierta (la misma en todas), barra superior con el título y la
+ * búsqueda. `chat`: pantalla de mensajería a todo el alto, sin barra superior en escritorio.
+ */
+export function Layout({ title, children, actions, fullHeight = false, chat = false }: { title: string; children: ReactNode; actions?: ReactNode; fullHeight?: boolean; chat?: boolean }) {
+    const { auth, ai, flash, nav } = usePage<SharedProps>().props;
     const path = usePage().url;
     const [palette, setPalette] = useState(false);
     const [mobileNav, setMobileNav] = useState(false);
@@ -29,80 +46,110 @@ export function Layout({ title, children, actions, fullHeight = false }: { title
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, []);
-    void url;
 
-    const nav = (
-        <nav className="flex flex-col gap-0.5" aria-label="Navegación principal">
-            {NAV.filter((n) => auth.can[n.can]).map((n) => {
-                const active = path.startsWith(n.href);
-                return (
-                    <Link key={n.href} href={n.href} onClick={() => setMobileNav(false)}
-                        className={cx('flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium', active ? 'bg-brand text-white' : 'text-ink/80 hover:bg-canvas')}>
-                        <n.icon size={16} strokeWidth={1.8} aria-hidden />
-                        {n.label}
-                    </Link>
-                );
-            })}
-        </nav>
+    const sidebar = (
+        <div className="flex h-full flex-col">
+            <div className="flex h-16 shrink-0 items-center gap-2 px-5">
+                <Link href="/inbox" className="flex items-center gap-2" aria-label="MElectric IA, inicio">
+                    <img src="/brand/logo-melectric.png" alt="MElectric" className="h-8 w-auto" />
+                    <span className="rounded-md bg-ink px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">IA</span>
+                </Link>
+                <button className="ml-auto rounded-full p-1.5 text-chat-meta hover:bg-black/[0.05] lg:hidden" onClick={() => setMobileNav(false)} aria-label="Cerrar menú"><X size={18} /></button>
+            </div>
+
+            <div className="px-3 pb-3">
+                <button onClick={() => { setMobileNav(false); setPalette(true); }} aria-label="Buscar (Ctrl+K)"
+                    className="flex h-9 w-full items-center gap-2 rounded-lg bg-chat-panel px-3 text-[13px] text-chat-meta transition-colors hover:bg-black/[0.06]">
+                    <Search size={15} aria-hidden />
+                    <span className="flex-1 text-left">Buscar</span>
+                    <kbd className="mono rounded border border-line bg-surface px-1.5 text-[10px]">⌘K</kbd>
+                </button>
+            </div>
+
+            <nav className="scrollbar-thin min-h-0 flex-1 space-y-5 overflow-y-auto px-3 pb-4" aria-label="Navegación principal">
+                {SECTIONS.map((section) => {
+                    const items = section.items.filter((n) => auth.can[n.can]);
+                    if (!items.length) return null;
+                    return (
+                        <div key={section.title}>
+                            <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-subtle">{section.title}</div>
+                            <ul className="space-y-0.5">
+                                {items.map((n) => {
+                                    const active = path === n.href || path.startsWith(`${n.href}/`) || path.startsWith(`${n.href}?`);
+                                    const count = n.badge === 'unread' ? nav?.unread ?? 0 : 0;
+                                    const review = n.badge === 'unread' ? nav?.review ?? 0 : 0;
+                                    return (
+                                        <li key={n.href}>
+                                            <Link href={n.href} onClick={() => setMobileNav(false)} aria-current={active ? 'page' : undefined}
+                                                className={cx('group relative flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] transition-colors',
+                                                    active ? 'bg-brand-soft font-semibold text-brand' : 'font-medium text-ink/75 hover:bg-black/[0.04] hover:text-ink')}>
+                                                {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-brand" aria-hidden />}
+                                                <n.icon size={19} strokeWidth={active ? 2.1 : 1.8} aria-hidden />
+                                                <span className="flex-1 truncate">{n.label}</span>
+                                                {review > 0 && <span title={`${review} en revisión de ingeniería`} className="h-2 w-2 rounded-full bg-warning" aria-label={`${review} en revisión de ingeniería`} />}
+                                                {count > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white" aria-label={`${count} sin leer`}>{count}</span>}
+                                            </Link>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+                    );
+                })}
+            </nav>
+
+            <div className="shrink-0 space-y-2 border-t border-line p-3">
+                <div className="flex items-start gap-2 rounded-lg bg-chat-panel px-3 py-2 text-[12px]">
+                    <span className={cx('mt-1 h-2 w-2 shrink-0 rounded-full', ai?.live ? 'bg-success' : 'bg-warning')} aria-hidden />
+                    <span className="min-w-0 leading-snug">
+                        <span className="block font-medium text-ink">IA {ai?.live ? 'en línea' : 'sin conexión'} <span className="mono font-normal text-chat-meta">· {ai?.provider}</span></span>
+                        <span className="block text-chat-meta">{ai?.writer ? 'Redacción con modelo aprobado' : 'Respuestas deterministas con fuente'}</span>
+                    </span>
+                </div>
+                <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-[12px] font-semibold text-white">{auth.user?.initials}</span>
+                    <span className="min-w-0 flex-1 leading-tight">
+                        <span className="block truncate text-[13px] font-semibold">{auth.user?.name}</span>
+                        <span className="block truncate text-[11.5px] text-chat-meta">{auth.user?.role_label}</span>
+                    </span>
+                    <button onClick={() => router.post('/logout')} className="rounded-full p-2 text-chat-meta hover:bg-black/[0.05] hover:text-ink" aria-label="Cerrar sesión" title="Cerrar sesión">
+                        <LogOut size={16} />
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 
     return (
         <div className="flex min-h-dvh">
             <Head title={title} />
-            <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 flex-col border-r border-line bg-surface px-2.5 py-3 lg:flex">
-                <Link href="/inbox" className="mb-4 flex items-center gap-2 px-1.5">
-                    <img src="/brand/logo-melectric.png" alt="MElectric" className="h-7 w-auto" />
-                    <span className="rounded-sm bg-ink px-1 py-px text-[10px] font-semibold tracking-wide text-white">IA</span>
-                </Link>
-                {nav}
-                <div className="mt-auto space-y-2 border-t border-line pt-3">
-                    <div className="px-1.5 text-[11px] text-muted">
-                        IA: <span className={cx('font-medium', ai?.live ? 'text-success' : 'text-warning')}>{ai?.provider} {ai?.live ? '· en línea' : '· sin conexión (sólo respuestas deterministas)'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-1.5">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand">{auth.user?.initials}</span>
-                        <div className="min-w-0 flex-1">
-                            <div className="truncate text-[12px] font-medium">{auth.user?.name}</div>
-                            <div className="truncate text-[11px] text-muted">{auth.user?.role_label}</div>
-                        </div>
-                        <button onClick={() => router.post('/logout')} className="rounded p-1 text-muted hover:bg-canvas hover:text-ink" aria-label="Cerrar sesión" title="Cerrar sesión">
-                            <LogOut size={15} />
-                        </button>
-                    </div>
-                </div>
-            </aside>
+            <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 border-r border-line bg-surface lg:block">{sidebar}</aside>
 
             {mobileNav && (
-                <div className="fixed inset-0 z-40 bg-ink/30 lg:hidden" onClick={() => setMobileNav(false)}>
-                    <div className="h-full w-64 bg-surface p-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="mb-3 flex items-center justify-between">
-                            <img src="/brand/logo-melectric.png" alt="MElectric" className="h-7" />
-                            <button onClick={() => setMobileNav(false)} aria-label="Cerrar menú" className="p-1"><X size={18} /></button>
-                        </div>
-                        {nav}
-                    </div>
+                <div className="fixed inset-0 z-50 lg:hidden">
+                    <div className="absolute inset-0 bg-ink/30" onClick={() => setMobileNav(false)} aria-hidden />
+                    <div className="absolute inset-y-0 left-0 w-[280px] max-w-[85%] bg-surface shadow-pop">{sidebar}</div>
                 </div>
             )}
 
             <div className="flex min-w-0 flex-1 flex-col">
-                <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-line bg-surface/95 px-3 backdrop-blur sm:px-4">
-                    <button className="rounded p-1.5 text-muted hover:bg-canvas lg:hidden" onClick={() => setMobileNav(true)} aria-label="Abrir menú"><Menu size={18} /></button>
-                    <h1 className="truncate text-[14px] font-semibold">{title}</h1>
+                <header className={cx('sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface/95 px-3 backdrop-blur sm:px-5', chat && 'lg:hidden')}>
+                    <button className="rounded-full p-2 text-chat-meta hover:bg-black/[0.05] lg:hidden" onClick={() => setMobileNav(true)} aria-label="Abrir menú"><Menu size={19} /></button>
+                    <h1 className="truncate text-[16px] font-semibold tracking-tight">{title}</h1>
                     <div className="ml-auto flex items-center gap-2">
                         {actions}
-                        <button onClick={() => setPalette(true)} className="flex h-8 items-center gap-2 rounded-md border border-line bg-canvas px-2.5 text-[12px] text-muted hover:text-ink" aria-label="Buscar (Ctrl+K)">
-                            <Search size={14} />
-                            <span className="hidden sm:inline">Buscar referencia, documento…</span>
-                            <kbd className="mono hidden rounded border border-line bg-surface px-1 text-[10px] sm:inline">⌘K</kbd>
+                        <button onClick={() => setPalette(true)} className="flex h-9 items-center gap-2 rounded-lg bg-chat-panel px-3 text-[12.5px] text-chat-meta hover:text-ink lg:hidden" aria-label="Buscar (Ctrl+K)">
+                            <Search size={15} />
                         </button>
                     </div>
                 </header>
                 {(flash?.message || flash?.error) && (
-                    <div role="status" className={cx('border-b px-4 py-1.5 text-[12px]', flash.error ? 'border-danger/20 bg-danger-soft text-danger' : 'border-success/20 bg-success-soft text-success')}>
+                    <div role="status" className={cx('px-4 py-1.5 text-[12.5px]', flash.error ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success',
+                        fullHeight ? 'fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-full shadow-pop' : 'border-b border-line')}>
                         {flash.error ?? flash.message}
                     </div>
                 )}
-                <main className={cx('min-w-0 flex-1', fullHeight ? 'h-[calc(100dvh-3rem)] overflow-hidden' : 'p-3 sm:p-4')}>{children}</main>
+                <main className={cx('min-w-0 flex-1', fullHeight ? cx('h-[calc(100dvh-3.5rem)] overflow-hidden', chat && 'lg:h-dvh') : 'p-3 sm:p-5')}>{children}</main>
             </div>
             <CommandPalette open={palette} onClose={() => setPalette(false)} />
         </div>

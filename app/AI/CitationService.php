@@ -31,7 +31,7 @@ final class CitationService
             $r = SourceRecord::query()->with('source')->find($recordId);
             $this->items[$key] = ['n' => count($this->items) + 1, 'kind' => 'excel',
                 'label' => 'Excel «'.($r?->source?->name ?? 'catálogo').'» · '.($r?->locator ?? '?'),
-                'url' => $r ? route('sources.record', $r->id, false) : null, 'locator' => $r?->locator ?? ''];
+                'url' => $r ? route('sources.record', $r->id, false) : null, 'locator' => $r?->locator ?? '', 'public_url' => null];
         }
 
         return $this->items[$key]['n'];
@@ -41,10 +41,18 @@ final class CitationService
     {
         $key = "document:{$documentId}:{$page}";
         if (! isset($this->items[$key])) {
-            $d = Document::query()->find($documentId);
+            $d = Document::query()->with('source')->find($documentId);
+            // Para el cliente: sólo documentos PÚBLICOS, con el enlace oficial del sitio de MElectric en esa página
+            $public = $d?->source?->access_level === 'PUBLIC' && $d->source->uri
+                ? $d->source->uri.($d->mime === 'application/pdf' ? '#page='.$page : '') : null;
+            $label = match ($d?->doc_type) {
+                'KNOWLEDGE_NOTE' => 'MElectric · '.$d->title,
+                'WEB_PAGE' => $d->title,
+                default => ($d?->title ?? 'Documento').($d?->mime === 'application/pdf' ? ' · pág. '.$page : '').($d?->document_date ? ' · '.$d->document_date->format('m/Y') : ''),
+            };
             $this->items[$key] = ['n' => count($this->items) + 1, 'kind' => 'document',
-                'label' => ($d?->title ?? 'Documento').' · pág. '.$page.($d?->document_date ? ' · '.$d->document_date->format('m/Y') : ''),
-                'url' => $d ? route('documents.file', $d->id, false).'#page='.$page : null, 'locator' => 'page:'.$page];
+                'label' => $label,
+                'url' => $d ? route('documents.file', $d->id, false).'#page='.$page : null, 'locator' => 'page:'.$page, 'public_url' => $public];
         }
 
         return $this->items[$key]['n'];

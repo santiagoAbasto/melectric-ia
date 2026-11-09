@@ -85,6 +85,17 @@ class PublicChatController extends Controller
             ->orderBy('id')->get()->map(fn (Message $m) => self::present($m, false, $c->public_token))->all();
     }
 
+    /**
+     * El cliente no ve rutas internas: los catálogos públicos enlazan al sitio oficial en la página citada y las filas
+     * del Excel se nombran como «Catálogo de productos MElectric», sin enlace.
+     */
+    private static function publicCitations(array $citations): array
+    {
+        return array_map(fn ($c) => ['n' => $c['n'], 'kind' => $c['kind'], 'locator' => '',
+            'label' => $c['kind'] === 'excel' ? 'Catálogo de productos MElectric' : $c['label'],
+            'url' => null, 'public_url' => $c['public_url'] ?? null], $citations);
+    }
+
     /** Mensaje para la UI. Al cliente no le llegan reglas ni trazas internas. */
     public static function present(Message $m, bool $internal, ?string $token = null): array
     {
@@ -92,7 +103,7 @@ class PublicChatController extends Controller
         $image = isset($p['image']) ? ($internal ? "/media/messages/{$m->id}" : "/chat/{$token}/media/{$m->id}") : null;
 
         return ['id' => $m->id, 'sender' => $m->sender, 'type' => $m->type, 'body' => $m->body, 'at' => $m->created_at?->toIso8601String(),
-            'products' => $p['products'] ?? [], 'citations' => $p['citations'] ?? [], 'table' => $p['table'] ?? null, 'missing' => $p['missing'] ?? [],
+            'products' => $p['products'] ?? [], 'citations' => $internal ? ($p['citations'] ?? []) : self::publicCitations($p['citations'] ?? []), 'table' => $p['table'] ?? null, 'missing' => $p['missing'] ?? [],
             'user' => $m->user?->name, 'image_url' => $image] + ($internal ? ['outcome' => $p['outcome'] ?? null, 'confidence' => $p['confidence'] ?? null, 'rules' => $p['rules'] ?? [],
                 'handoff' => $p['handoff'] ?? null, 'pending_review' => $p['pending_review'] ?? false, 'run_id' => $m->ai_run_id, 'approved_by' => $p['approved_by'] ?? null] : []);
     }

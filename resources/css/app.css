@@ -32,6 +32,15 @@
     --radius-md: 6px;
     --radius-lg: 8px;
 
+    /* Chat (estilo mensajería): fondo con textura sutil, burbuja propia en azul MElectric suave */
+    --color-chat-wall: #eef1f5;
+    --color-chat-panel: #f6f7f9;
+    --color-bubble-in: #ffffff;
+    --color-bubble-out: #d8e8f7;
+    --color-bubble-note: #fff5dc;
+    --color-chat-meta: #667781;
+
+    --shadow-bubble: 0 1px 0.5px rgb(11 20 26 / 0.13);
     --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06);
     --shadow-pop: 0 8px 24px rgb(16 24 40 / 0.14);
 }
@@ -43,8 +52,37 @@ body { font-size: 13px; line-height: 1.45; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .tnum { font-variant-numeric: tabular-nums; }
 
-:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
+@layer base {
+    :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── Chat ─────────────────────────────────────────────────────────── */
+.chat-wall {
+    background-color: var(--color-chat-wall);
+    background-image: radial-gradient(rgb(22 102 174 / 0.07) 1px, transparent 1.2px);
+    background-size: 20px 20px;
+}
+.bubble { position: relative; box-shadow: var(--shadow-bubble); }
+.bubble-tail-in { border-top-left-radius: 0; }
+.bubble-tail-out { border-top-right-radius: 0; }
+.bubble-tail-in::before, .bubble-tail-out::before {
+    content: ''; position: absolute; top: 0; width: 8px; height: 13px; background: inherit;
+}
+.bubble-tail-in::before { left: -7px; clip-path: polygon(100% 0, 0 0, 100% 100%); }
+.bubble-tail-out::before { right: -7px; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.cite {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; padding: 0 3px;
+    margin: 0 1px; border-radius: 4px; background: rgb(22 102 174 / 0.12); color: var(--color-brand);
+    font: 600 10px/1 var(--font-mono); vertical-align: 1px;
+}
+.typing-dot { width: 6px; height: 6px; border-radius: 9999px; background: var(--color-chat-meta); animation: typing 1.2s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgb(0 0 0 / 0.18) transparent; }
+details > summary { list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }

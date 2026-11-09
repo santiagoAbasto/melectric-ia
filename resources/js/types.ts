@@ -5,7 +5,8 @@ export type Permission =
 
 export interface SharedProps {
     auth: { user: { id: number; name: string; email: string; initials: string; role: string; role_label: string } | null; can: Partial<Record<Permission, boolean>> };
-    ai: { provider: string; live: boolean } | null;
+    ai: { provider: string; live: boolean; writer?: boolean } | null;
+    nav?: { unread: number; review: number } | null;
     flash: { message?: string | null; error?: string | null };
     errors: Record<string, string>;
     [key: string]: unknown;
@@ -28,7 +29,7 @@ export interface ProductCard {
     relation?: { type: string; status: string };
 }
 
-export interface Citation { n: number; kind: 'excel' | 'document'; label: string; url: string | null; locator: string }
+export interface Citation { n: number; kind: 'excel' | 'document'; label: string; url: string | null; locator: string; public_url?: string | null }
 
 export interface TechTable { title: string; header: string[]; rows: string[][]; citation?: number }
 
@@ -41,7 +42,7 @@ export interface ChatMessage {
     products: ProductCard[];
     citations: Citation[];
     table: TechTable | null;
-    missing: { keys: string[]; label: string; question: string }[];
+    missing: { keys: string[]; label: string; question: string; options?: { label: string; send: string }[] }[];
     user?: string | null;
     image_url?: string | null;
     outcome?: string | null;

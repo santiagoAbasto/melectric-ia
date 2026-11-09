@@ -1,8 +1,8 @@
 import { Head } from '@inertiajs/react';
-import { Paperclip, Send } from 'lucide-react';
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { MessageView } from '@/components/MessageView';
-import { Button, Field, inputClass } from '@/components/ui';
+import { ArrowDown, Paperclip, RotateCcw, Send } from 'lucide-react';
+import { type FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Avatar, ChatThread, TypingBubble } from '@/components/MessageView';
+import { cx } from '@/components/ui';
 import type { ChatMessage } from '@/types';
 
 const KEY = 'melectric_chat_token';
@@ -19,11 +19,13 @@ async function api<T>(url: string, body?: unknown): Promise<T> {
         body: body ? JSON.stringify(body) : undefined,
         credentials: 'same-origin',
     });
-    if (!res.ok) throw new Error(res.status === 429 ? 'Demasiados mensajes seguidos. Esperá un momento.' : `Error ${res.status}`);
+    if (!res.ok) throw new Error(res.status === 429 ? 'Demasiados mensajes seguidos. Esperá un momento.' : `No se pudo enviar (error ${res.status}).`);
     return res.json() as Promise<T>;
 }
 
-const EXAMPLES = ['Necesito un contactor para un motor de 15 kW 400 V', 'interruptor curva C 32 A tripolar', '¿Qué diferencial tienen de 40 A y 30 mA?', '¿En qué catálogo aparece mMC6-C32/3?'];
+const EXAMPLES = ['Contactor para motor de 15 kW 400 V', 'Termomagnética curva C 32 A tripolar', 'Diferencial 40 A 30 mA', '¿En qué catálogo aparece mMC6-C32/3?'];
+
+const inputCls = 'h-11 w-full rounded-lg bg-chat-panel px-3.5 text-[14px] outline-none ring-brand/30 placeholder:text-chat-meta focus:ring-2';
 
 /** Chat web del cliente (WebChannel). Mobile-first; la conversación se identifica con un token guardado en el navegador. */
 export default function CustomerChat() {
@@ -33,13 +35,20 @@ export default function CustomerChat() {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [form, setForm] = useState({ name: '', company: '', email: '' });
-    const bottom = useRef<HTMLDivElement>(null);
-    const lastId = messages.length ? messages[messages.length - 1].id : 0;
+    const [atBottom, setAtBottom] = useState(true);
+    const scroller = useRef<HTMLDivElement>(null);
+    const input = useRef<HTMLTextAreaElement>(null);
+    const lastId = messages.filter((m) => m.id > 0).at(-1)?.id ?? 0;
+    const waitingPhoto = messages.length > 0 && messages[messages.length - 1].type === 'IMAGE';
 
     const merge = (incoming: ChatMessage[]) => setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.id));
         return [...prev, ...incoming.filter((m) => !ids.has(m.id))];
     });
+    const toBottom = useCallback((smooth = true) => {
+        const el = scroller.current;
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    }, []);
 
     const poll = useCallback(async () => {
         if (!token) return;
@@ -47,7 +56,11 @@ export default function CustomerChat() {
     }, [token, lastId]);
 
     useEffect(() => { poll(); const t = setInterval(poll, 5000); return () => clearInterval(t); }, [poll]);
-    useEffect(() => { bottom.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, [messages.length, sending]);
+    useLayoutEffect(() => { if (atBottom) toBottom(messages.length > 1); }, [messages.length, sending]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        const el = input.current;
+        if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 140)}px`; }
+    }, [text]);
 
     const start = async (e: FormEvent) => {
         e.preventDefault();
@@ -57,6 +70,26 @@ export default function CustomerChat() {
             try { localStorage.setItem(KEY, r.token); } catch { /* sin almacenamiento: la conversación dura lo que la pestaña */ }
             setToken(r.token);
         } catch (err) { setError((err as Error).message); }
+    };
+
+    const send = async (body: string) => {
+        if (!token || !body.trim() || sending) return;
+        setSending(true);
+        setError(null);
+        setText('');
+        setAtBottom(true);
+        // Mensaje propio al instante (como en una app de mensajería); se reemplaza por el del servidor al confirmarse
+        const tempId = -Date.now();
+        setMessages((prev) => [...prev, { id: tempId, sender: 'CUSTOMER', type: 'TEXT', body, at: new Date().toISOString(), products: [], citations: [], table: null, missing: [] }]);
+        try {
+            const res = await api<{ messages: ChatMessage[] }>(`/chat/${token}/messages`, { body, after: lastId });
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+            merge(res.messages);
+        } catch (err) {
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+            setError((err as Error).message);
+            setText(body);
+        } finally { setSending(false); }
     };
 
     const upload = async (file: File | undefined) => {
@@ -75,69 +108,103 @@ export default function CustomerChat() {
         finally { setSending(false); }
     };
 
-    const send = async (body: string) => {
-        if (!token || !body.trim() || sending) return;
-        setSending(true);
-        setError(null);
-        setText('');
-        try { merge((await api<{ messages: ChatMessage[] }>(`/chat/${token}/messages`, { body, after: lastId })).messages); }
-        catch (err) { setError((err as Error).message); setText(body); }
-        finally { setSending(false); }
+    const quickReply = (value: string, sendNow: boolean) => {
+        if (sendNow) { send(value); return; }
+        setText(value);
+        setTimeout(() => input.current?.focus(), 0);
     };
 
     return (
-        <div className="flex h-dvh flex-col bg-canvas">
+        <div className="flex h-dvh flex-col bg-chat-wall">
             <Head title="Asistente técnico" />
-            <header className="flex items-center gap-2 border-b border-line bg-surface px-4 py-2.5">
-                <img src="/brand/logo-melectric.png" alt="MElectric" className="h-7 w-auto" />
-                <div className="ml-1 border-l border-line pl-3">
-                    <div className="text-[13px] font-semibold">Asistente técnico</div>
-                    <div className="text-[11px] text-muted">Respuestas con fuente del catálogo · te deriva con ventas o ingeniería cuando hace falta</div>
+            <header className="flex h-[60px] shrink-0 items-center gap-3 bg-brand px-4 text-white shadow-sm">
+                <Avatar name="MElectric" assistant size={40} />
+                <div className="min-w-0 flex-1">
+                    <div className="truncate text-[15px] font-semibold">Asistente técnico MElectric</div>
+                    <div className="truncate text-[12px] text-white/80">{sending ? 'escribiendo…' : 'Responde con la fuente del catálogo'}</div>
                 </div>
-                {token && <button className="ml-auto text-[11px] text-muted hover:text-ink" onClick={() => { try { localStorage.removeItem(KEY); } catch { /* */ } setToken(null); setMessages([]); }}>Nueva conversación</button>}
+                {token && (
+                    <button className="rounded-full p-2 text-white/90 hover:bg-white/10" title="Nueva conversación" aria-label="Nueva conversación"
+                        onClick={() => { try { localStorage.removeItem(KEY); } catch { /* */ } setToken(null); setMessages([]); }}>
+                        <RotateCcw size={18} />
+                    </button>
+                )}
             </header>
 
             {!token ? (
-                <main className="flex flex-1 items-center justify-center p-4">
-                    <form onSubmit={start} className="w-full max-w-sm space-y-3 rounded-lg border border-line bg-surface p-5 shadow-card">
-                        <h1 className="text-[15px] font-semibold">Consultá con el asistente técnico de MElectric</h1>
-                        <p className="text-[12px] text-muted">Buscá productos por referencia o por características. Precio y stock los confirma el equipo comercial.</p>
-                        <Field label="Nombre"><input required maxLength={80} className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoComplete="name" /></Field>
-                        <Field label="Empresa (opcional)"><input maxLength={120} className={inputClass} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} autoComplete="organization" /></Field>
-                        <Field label="Correo (opcional)"><input type="email" maxLength={160} className={inputClass} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="email" /></Field>
-                        {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-                        <Button type="submit" variant="primary" className="w-full">Empezar</Button>
+                <main className="chat-wall flex flex-1 items-center justify-center overflow-y-auto p-4">
+                    <form onSubmit={start} className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-pop">
+                        <div className="mb-4 flex flex-col items-center text-center">
+                            <img src="/brand/logo-melectric.png" alt="MElectric" className="h-10 w-auto" />
+                            <h1 className="mt-3 text-[17px] font-semibold">Hablá con nuestro asistente técnico</h1>
+                            <p className="mt-1 text-[13px] text-chat-meta">Buscá productos por referencia o por características. Precio y stock los confirma el equipo comercial.</p>
+                        </div>
+                        <div className="space-y-2.5">
+                            <label className="block"><span className="sr-only">Nombre</span>
+                                <input required maxLength={80} aria-label="Nombre" placeholder="Tu nombre" className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoComplete="name" />
+                            </label>
+                            <label className="block"><span className="sr-only">Empresa (opcional)</span>
+                                <input maxLength={120} placeholder="Empresa (opcional)" className={inputCls} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} autoComplete="organization" />
+                            </label>
+                            <label className="block"><span className="sr-only">Correo (opcional)</span>
+                                <input type="email" maxLength={160} placeholder="Correo (opcional)" className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="email" />
+                            </label>
+                        </div>
+                        {error && <p role="alert" className="mt-2 text-[12.5px] text-danger">{error}</p>}
+                        <button type="submit" className="mt-4 h-11 w-full rounded-full bg-brand text-[14px] font-semibold text-white hover:bg-brand-strong">Empezar conversación</button>
                     </form>
                 </main>
             ) : (
                 <>
-                    <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-6" aria-live="polite">
-                        <div className="mx-auto max-w-3xl space-y-2.5">
-                            {messages.length === 0 && (
-                                <div className="rounded-lg border border-line bg-surface p-3 text-[13px]">
-                                    <p className="mb-2">Hola, ¿qué necesitás? Podés escribir una referencia o lo que buscás. Por ejemplo:</p>
-                                    <div className="flex flex-wrap gap-1.5">{EXAMPLES.map((ex) => <button key={ex} onClick={() => send(ex)} className="rounded-sm border border-line px-2 py-1 text-[12px] text-brand hover:bg-brand-soft">{ex}</button>)}</div>
+                    <div className="relative min-h-0 flex-1">
+                        <main ref={scroller} onScroll={(e) => { const el = e.currentTarget; setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80); }}
+                            className="chat-wall scrollbar-thin absolute inset-0 overflow-y-auto px-3 py-3 sm:px-6" aria-live="polite">
+                            <div className="mx-auto max-w-3xl">
+                                <div className="mb-3 flex justify-center">
+                                    <span className="max-w-md rounded-lg bg-[#fdf6d8] px-3 py-1.5 text-center text-[11.5px] leading-snug text-[#6b5a1e] shadow-[var(--shadow-bubble)]">
+                                        Las respuestas técnicas salen del catálogo de MElectric y muestran su fuente. Si falta información, el asistente pregunta o te deriva con una persona.
+                                    </span>
                                 </div>
-                            )}
-                            {messages.map((m) => <MessageView key={m.id} message={m} customerSide />)}
-                            {sending && <div className="text-[12px] text-muted" role="status">El asistente está consultando el catálogo…</div>}
-                            {messages.length > 0 && messages[messages.length - 1].type === 'IMAGE' && !sending && <div className="text-[12px] text-muted" role="status">Leyendo la foto…</div>}
-                            <div ref={bottom} />
-                        </div>
-                    </main>
-                    <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="border-t border-line bg-surface p-2.5">
+                                {messages.length === 0 && (
+                                    <div className="space-y-2">
+                                        <div className="bubble bubble-tail-in max-w-[88%] rounded-lg bg-bubble-in px-2.5 py-1.5 text-[13.5px] sm:max-w-[68%]">
+                                            Hola, ¿qué necesitás? Escribí una referencia o lo que buscás, o mandá una foto de la etiqueta.
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {EXAMPLES.map((ex) => (
+                                                <button key={ex} onClick={() => send(ex)} className="rounded-full border border-brand/25 bg-white px-3 py-1 text-[12.5px] font-medium text-brand shadow-sm hover:bg-brand-soft">{ex}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <ChatThread messages={messages} customerSide onQuickReply={quickReply} />
+                                {(sending || waitingPhoto) && <TypingBubble label={waitingPhoto ? 'Leyendo la foto' : 'El asistente está escribiendo'} />}
+                            </div>
+                        </main>
+                        {!atBottom && (
+                            <button onClick={() => { toBottom(); setAtBottom(true); }} className="absolute bottom-3 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-surface text-chat-meta shadow-pop" aria-label="Ir al último mensaje">
+                                <ArrowDown size={18} />
+                            </button>
+                        )}
+                    </div>
+                    <form onSubmit={(e) => { e.preventDefault(); send(text); }} className="shrink-0 bg-chat-panel px-2.5 py-2 sm:px-4">
+                        {error && <p role="alert" className="mx-auto mb-1.5 max-w-3xl text-[12.5px] text-danger">{error}</p>}
                         <div className="mx-auto flex max-w-3xl items-end gap-2">
-                            <label className="cursor-pointer rounded p-2 text-muted hover:bg-canvas hover:text-ink" title="Enviar una foto de la etiqueta o del producto">
-                                <Paperclip size={16} aria-hidden />
-                                <span className="sr-only">Adjuntar foto</span>
-                                <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
-                            </label>
-                            <textarea rows={1} aria-label="Mensaje" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text); } }}
-                                placeholder="Escribí tu consulta…" className="max-h-32 min-h-[38px] flex-1 resize-none rounded-md border border-line px-3 py-2 text-[14px] focus:border-brand focus:outline-none" />
-                            <Button type="submit" variant="primary" disabled={sending || !text.trim()} aria-label="Enviar"><Send size={15} /></Button>
+                            <div className="flex min-h-[44px] flex-1 items-end rounded-3xl bg-surface pl-1.5 pr-3 shadow-[var(--shadow-bubble)] focus-within:ring-2 focus-within:ring-brand/25">
+                                <label className={cx('mb-[3px] flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full text-chat-meta hover:bg-black/[0.05]', sending && 'pointer-events-none opacity-40')} title="Enviar una foto de la etiqueta o del producto">
+                                    <Paperclip size={19} aria-hidden />
+                                    <span className="sr-only">Adjuntar foto</span>
+                                    <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
+                                </label>
+                                <textarea ref={input} rows={1} aria-label="Mensaje" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text); } }}
+                                    placeholder="Escribí un mensaje" className="scrollbar-thin max-h-36 flex-1 resize-none bg-transparent py-3 pl-1 text-[15px] leading-5 outline-none placeholder:text-chat-meta focus-visible:outline-none" />
+                            </div>
+                            <button type="submit" disabled={sending || !text.trim()} aria-label="Enviar"
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-white transition-opacity hover:bg-brand-strong disabled:opacity-40">
+                                <Send size={19} className="translate-x-px" />
+                            </button>
                         </div>
-                        {error && <p role="alert" className="mx-auto mt-1 max-w-3xl text-[12px] text-danger">{error}</p>}
                     </form>
                 </>
             )}
