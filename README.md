@@ -12,7 +12,7 @@ cp .env.example .env && php artisan key:generate      # completar DB_* (MySQL) y
 php artisan migrate && php artisan db:seed && php artisan storage:link
 php artisan melectric:import-catalog                  # Excel B2B V2 + imágenes de línea (storage/app/private/sources)
 php artisan melectric:ingest-documents                # 10 PDF públicos del sitio
-php artisan melectric:crawl-public                    # páginas públicas (respeta robots, no entra a /Galeria)
+php artisan melectric:sync-web                        # sitio público con Python (respeta robots, no entra a /Galeria)
 swiftc -O bin/ocr-macos.swift -o bin/ocr-macos        # OCR local (sólo macOS)
 npm run build && php artisan serve --port=8077
 ```
@@ -26,9 +26,10 @@ npm run build && php artisan serve --port=8077
 |---|---|
 | `php artisan melectric:import-catalog [excel] [--images=]` | Importa/actualiza el catálogo (idempotente; informa nuevos/actualizados/sin cambios/fallidos) |
 | `php artisan melectric:ingest-documents [dir] [--reprocess]` | Pipeline documental de PDF |
-| `php artisan melectric:crawl-public` | Sincroniza el sitio público |
+| `php artisan melectric:sync-web [--base=URL]` | Sincroniza el sitio con el script Python (también con un clic en Documentos) |
+| `php artisan melectric:crawl-public` | Rastreador PHP anterior (queda como respaldo) |
 | `php artisan melectric:eval [--llm]` | Dataset dorado del asistente con métricas de abstención |
-| `./vendor/bin/pest` · `npm run typecheck` · `npm test` · `npm run build` · `npx playwright test` | Calidad |
+| `./vendor/bin/pest` · `npm run typecheck` · `npm test` · `npm run build` · `npx playwright test` · `cd scraper && python3 -m unittest` | Calidad |
 
 ## Documentación
 

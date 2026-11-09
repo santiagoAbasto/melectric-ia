@@ -8,6 +8,7 @@
 | Build | `npm run build` | Vite de producción |
 | E2E | `npx playwright test` | Flujos críticos en navegador (ver `tests/e2e`) |
 | Asistente | `php artisan melectric:eval [--llm]` | Dataset dorado `tests/AI/evals/golden.json` |
+| Sincronizador | `cd scraper && python3 -m unittest test_melectric_sync.py` | Texto sin menú ni pie, JSON-LD sin precios, SSRF y lista blanca, enlaces |
 
 Las pruebas usan SQLite en memoria y proveedores `fake` (forzado en `phpunit.xml`): nunca tocan MySQL ni llaman a una IA real.
 

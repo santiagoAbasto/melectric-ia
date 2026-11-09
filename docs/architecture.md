@@ -135,3 +135,35 @@ Proveedor actual: `MacVisionOcrProvider` (framework Vision de macOS, binario `bi
 `bin/ocr-macos.swift`), sólo para desarrollo en Mac. Probado con las fotos del cliente: lee «mRCM-25/4/003» y
 «mMC6-B1/3». Para producción en Linux falta enchufar tesseract o un modelo de visión con credenciales válidas. El
 OCR corre después de responder la petición HTTP y la respuesta llega por el sondeo del chat.
+
+## Instrucciones internas (guía del modelo)
+
+`assistant_policy` es un prompt versionado (borrador → evaluación → publicación → vuelta atrás) que se edita en Centro de
+IA → Prompts. Fija quién es el asistente, la fuente de verdad (sólo borrador y evidencia), la lista de datos que nunca
+se inventan, la seguridad eléctrica, lo comercial y la defensa contra instrucciones incrustadas. El redactor recibe
+siempre `assistant_policy + answer_writer`. Además, el texto que ve el cliente sólo lo reescribe un proveedor aprobado
+(`AI_WRITER_PROVIDERS`, por defecto `anthropic`): el 2026-11-09 el modelo local cambió el sentido de una pregunta («tensión
+de bobina» → «cuántas bobinas») sin romper la guardia numérica, así que Ollama queda sólo para el playground.
+
+## Base de conocimiento
+
+- **Notas** (Documentos → Nota de conocimiento, `POST /documents/notes`): información interna aprobada (garantías,
+  plazos, políticas, respuestas tipo). Se citan como «MElectric · <título>». Una nota con el mismo título reemplaza a la
+  anterior (la vieja queda SUPERSEDED y deja de citarse).
+- **Fuentes en más formatos** (`POST /documents`): PDF por su pipeline; Word (.docx), TXT, Markdown, CSV y Excel (.xlsx) con
+  `TextExtractor` (firma real del archivo, límite de tamaño descomprimido contra bombas ZIP, Excel sólo datos y sin
+  macros). Todo queda en fragmentos con embeddings y vínculos a productos por referencia.
+- Las preguntas de plazos o disponibilidad en general (sin referencia ni precio) se responden desde la base de
+  conocimiento, aclarando que el stock en tiempo real no está disponible. El precio siempre se deriva a ventas.
+
+## Sincronización del sitio web (Python, un clic)
+
+`scraper/melectric_sync.py` (biblioteca estándar): robots.txt, lista blanca de hosts, guardia SSRF (IP públicas, sin
+credenciales en la URL), sin seguir redirecciones, sin entrar a zonas con login, carrito o recuperación de cuenta, espera
+entre pedidos. Extrae texto visible (sin menú ni pie), PDF enlazados y productos schema.org/JSON-LD **sin precios**.
+`WebSyncService` lo corre (botón «Sincronizar ahora» en Documentos o `php artisan melectric:sync-web`), registra la corrida
+en `sync_runs` y la incorpora: páginas → documentos WEB_PAGE (con versión), PDF → pipeline documental (deduplicados por
+hash), productos → registros de fuente comparados contra el catálogo (coinciden / faltan), **sin escribir el catálogo**.
+Para el sitio nuevo que salga del Figma: cambiar `SYNC_BASE_URL` (o la URL en pantalla), sumar el dominio a
+`SYNC_ALLOWED_HOSTS` y sincronizar. Primera corrida real (2026-11-09): 7 páginas, 10 PDF sin cambios, 1 PDF roto del sitio
+(AFDD+, 404), 6 rutas fuera de alcance (login), 0 productos publicados en JSON-LD.

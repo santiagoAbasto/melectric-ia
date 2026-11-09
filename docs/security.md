@@ -10,6 +10,10 @@
   privado (`storage/app/private`), servidos sólo a usuarios autenticados con `X-Content-Type-Options: nosniff` y CSP
   `default-src 'none'`; las páginas web guardadas se sirven como texto plano. No se ejecutan macros (PhpSpreadsheet en
   modo sólo datos). SVG no se aceptan.
+- **Fuentes de texto:** Word/Excel se validan por firma ZIP y tamaño descomprimido; TXT/MD/CSV no pueden traer bytes
+  binarios; la extensión se valida en el servidor (`extensions:pdf,docx,txt,md,csv,xlsx`).
+- **Sincronizador Python:** misma política que el PHP (lista blanca, IP públicas, sin redirecciones ni login); el dominio
+  a sincronizar se valida contra `SYNC_ALLOWED_HOSTS` antes de lanzar el proceso; corre sin shell (argumentos separados).
 - **SSRF:** `UrlGuard` sólo http/https, lista blanca de hosts, sin credenciales en la URL, resuelve DNS y rechaza
   loopback, redes privadas, link-local (incluye 169.254.169.254) y rangos reservados; el crawler no sigue redirecciones.
 - **Prompt injection:** documentos y páginas son datos; el system prompt lo dice, la evidencia va entre `<evidencia>`, los
