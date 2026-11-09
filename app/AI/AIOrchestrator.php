@@ -112,8 +112,10 @@ final class AIOrchestrator
         $route = $flow['llm_route'] ?? 'none';
         $providerName = $options['provider'] ?? $profile?->provider ?? config('melectric.ai.provider');
         $promptVersion = isset($options['prompt_version_id']) ? PromptVersion::query()->find($options['prompt_version_id']) : $this->prompts->published('answer_writer');
-        if ($route !== 'none' && $outcome === 'ANSWERED' && ($options['use_llm'] ?? true) && $this->providers->isLive($providerName) && $promptVersion) {
-            $llm = $this->write($text, $flow, $message, $route, $providerName, $promptVersion->body) + $llm;
+        $approvedWriter = in_array($providerName, config('melectric.ai.writer_providers', []), true)
+            || (in_array($origin, ['PLAYGROUND', 'EVAL'], true) && isset($options['provider'])) || $providerName === 'fake';
+        if ($route !== 'none' && $outcome === 'ANSWERED' && ($options['use_llm'] ?? true) && $approvedWriter && $this->providers->isLive($providerName) && $promptVersion) {
+            $llm = $this->write($text, $flow, $message, $route, $providerName, $this->prompts->writerSystem($promptVersion->body)) + $llm;
             if ($llm['used'] && ! $llm['rejected']) {
                 $text = $llm['text'];
             }
@@ -235,6 +237,16 @@ final class AIOrchestrator
 
     private function commercial(ParsedQuery $q): array
     {
+        // Plazos y disponibilidad en general (sin referencia ni precio): primero la base de conocimiento
+        if (! $q->hasIntent('PRICE') && ! $q->referenceCandidates) {
+            $k = $this->fromKnowledge($q);
+            if ($k['outcome'] === 'ANSWERED') {
+                $this->rules->fire('STOCK_UNAVAILABLE');
+                $k['text'] .= "\n\nEl stock puntual de cada producto no lo tengo en tiempo real: si me pasás la referencia, te derivo con ventas para confirmarlo.";
+
+                return $k + ['intent' => 'DELIVERY_POLICY'];
+            }
+        }
         $what = [];
         if ($q->hasIntent('PRICE')) {
             $this->rules->fire('PRICE_UNAVAILABLE');
@@ -346,7 +358,7 @@ final class AIOrchestrator
         $missing = [];
         if ($coils->isNotEmpty() && ! $q->has('coil_voltage')) {
             $this->rules->fire('ASK_FOR_MISSING_INPUT');
-            $missing[] = ['keys' => ['coil_voltage'], 'label' => 'Tensión de bobina', 'question' => '¿Qué tensión de bobina necesitás (por ejemplo 24 V CC o 220 V CA)?'];
+            $missing[] = ['keys' => ['coil_voltage'], 'label' => 'Tensión de bobina', 'question' => '¿Qué tensión de bobina necesitás?', 'options' => $this->coilOptions($products)];
             $text .= "\n\n".$missing[0]['question'];
         }
 
@@ -367,8 +379,9 @@ final class AIOrchestrator
             // Agrupado por tamaño: el dato AC-3 es del tamaño; la bobina define la variante
             foreach ($products->groupBy(fn (Product $p) => implode('', ProductReferenceNormalizer::sizeKey($p->reference) ?? [$p->base_reference])) as $size => $group) {
                 $p = $group->first();
-                $lines[] = '• '.$size.': '.$this->specText($p, ['motor_power', 'rated_current_ac3', 'rated_current_ac1'])
-                    .' — '.$group->count().' variante'.($group->count() > 1 ? 's' : '').' de bobina ('.$group->take(3)->pluck('reference')->join(', ').($group->count() > 3 ? '…' : '').')';
+                $lines[] = $group->count() === 1
+                    ? '• '.$p->reference.' (código '.$p->internal_code.') — '.$this->compactAc3($p)
+                    : '• '.$size.' — '.$this->compactAc3($p).' · '.$group->count().' bobinas disponibles';
                 $cards[] = $this->card($p);
             }
         } else {
@@ -385,7 +398,7 @@ final class AIOrchestrator
         }
         $ask = [];
         if ($q->productType === 'contactor' && ! $q->has('coil_voltage') && $products->count() > 1) {
-            $ask[] = ['keys' => ['coil_voltage'], 'label' => 'Tensión de bobina', 'question' => '¿Qué tensión de bobina necesitás (por ejemplo 24 V CC o 220 V CA)? Con eso te paso la referencia exacta.'];
+            $ask[] = ['keys' => ['coil_voltage'], 'label' => 'Tensión de bobina', 'question' => '¿Qué tensión de bobina necesitás? Con eso te paso la referencia exacta.', 'options' => $this->coilOptions($products)];
         }
         foreach ($missing as $m) {
             if ($products->count() > 1) {
@@ -628,6 +641,39 @@ final class AIOrchestrator
         }
 
         return implode(' · ', $parts);
+    }
+
+    /** «15 kW · 32 A en AC-3 (380-400 V) · 45 A en AC-1 [1]»: los datos del tamaño, con su cita. */
+    private function compactAc3(Product $p): string
+    {
+        $get = fn (string $key) => $p->specifications->where('status', '!=', 'REJECTED')->filter(fn ($s) => $s->definition->key === $key)
+            ->sortByDesc(fn ($s) => [$s->document_id ? 1 : 0, $s->confidence])->first();
+        $parts = [];
+        $cites = [];
+        $ac3At = str_contains((string) $get('rated_current_ac3')?->qualifier, '380') ? ' (380-400 V)' : '';
+        foreach (['motor_power' => '%s', 'rated_current_ac3' => '%s en AC-3'.$ac3At, 'rated_current_ac1' => '%s en AC-1'] as $key => $fmt) {
+            if ($s = $get($key)) {
+                $parts[] = sprintf($fmt, UnitService::display($s));
+                $cites[$this->cit->forSpec($s)] = true;
+            }
+        }
+
+        return implode(' · ', $parts).' ['.implode('] [', array_keys($cites)).']';
+    }
+
+    /**
+     * Tensiones de bobina que realmente existen entre los candidatos, como respuestas rápidas: «24 V CA» envía
+     * «bobina 24 Vca». Sólo opciones del catálogo, nunca valores sugeridos.
+     *
+     * @return list<array{label:string, send:string}>
+     */
+    private function coilOptions(Collection $products): array
+    {
+        return $products->map(fn (Product $p) => $p->specifications->first(fn ($s) => $s->definition->key === 'coil_voltage'))->filter()
+            ->map(fn ($s) => ['v' => (float) $s->value, 'k' => $s->qualifier])->unique(fn ($o) => $o['v'].$o['k'])
+            ->sortBy([['k', 'asc'], ['v', 'asc']])->take(8)
+            ->map(fn ($o) => ['label' => rtrim(rtrim(number_format($o['v'], 1, ',', ''), '0'), ',').' V '.($o['k'] === 'DC' ? 'CC' : 'CA'),
+                'send' => 'bobina '.rtrim(rtrim(number_format($o['v'], 1, '.', ''), '0'), '.').' '.($o['k'] === 'DC' ? 'Vcc' : 'Vca')])->values()->all();
     }
 
     private function card(Product $p): array

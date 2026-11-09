@@ -53,14 +53,28 @@ final class RequiredInputService
         ],
     ];
 
-    /** @return list<array{keys:list<string>, label:string, question:string}> */
+    /** Respuestas rápidas: formatos de respuesta que el parser entiende, no valores recomendados. */
+    private const OPTIONS = [
+        'poles' => [['1 polo', '1 polo'], ['2 polos', '2 polos'], ['3 polos', '3 polos'], ['4 polos', '4 polos']],
+        'curve' => [['Curva B', 'curva B'], ['Curva C', 'curva C'], ['Curva D', 'curva D']],
+        'sensitivity' => [['30 mA', '30 mA'], ['300 mA', '300 mA']],
+        'phases' => [['Monofásica 220 V', 'monofásico 220 V'], ['Trifásica 380 V', 'trifásico 380 V']],
+        '__type' => [['Termomagnética', 'termomagnética'], ['Diferencial', 'diferencial'], ['Compacto', 'interruptor compacto'], ['Seccionador', 'seccionador']],
+    ];
+
+    /** @return list<array{keys:list<string>, label:string, question:string, options?:list<array{label:string, send:string}>}> */
     public function missing(ParsedQuery $q, int $max = 2): array
     {
         $out = [];
         foreach (self::REQUIRED[$q->productType] ?? [] as [$keys, $label, $question]) {
             $present = collect($keys)->contains(fn ($k) => $k === '__type' ? false : $q->has($k));
             if (! $present) {
-                $out[] = ['keys' => $keys, 'label' => $label, 'question' => $question];
+                $options = self::OPTIONS[$keys[0]] ?? null;
+                if ($keys[0] === 'poles' && $q->productType === 'rcd') {
+                    $options = [['Bipolar', '2 polos'], ['Tetrapolar', '4 polos']];
+                }
+                $out[] = ['keys' => $keys, 'label' => $label, 'question' => $question]
+                    + ($options ? ['options' => array_map(fn ($o) => ['label' => $o[0], 'send' => $o[1]], $options)] : []);
             }
         }
 
