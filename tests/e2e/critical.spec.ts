@@ -20,14 +20,18 @@ test('Flujo 2: «interruptor curva C 32A 3P» → búsqueda estructurada con cit
     const answer = page.getByText('el catálogo indica').last();
     await expect(answer).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('mMC6-C32/3').first()).toBeVisible();
-    await expect(page.locator('a[href^="/sources/records/"]').first()).toBeVisible();
+    await expect(page.getByText(/Fuentes · \d+/).last()).toBeVisible();
+    await expect(page.locator('a[href^="/sources/"], a[href^="/documents/"], a[href^="/products/"]')).toHaveCount(0); // el cliente no ve rutas internas
 });
 
 test('Flujo 3: contactor para motor 15 kW 400 V → tamaño del catálogo con página', async ({ page }) => {
     await startCustomerChat(page, 'Flujo 3');
     await say(page, 'Necesito un contactor para motor 15kW 400V');
     await expect(page.getByText(/DILM32/).first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('link', { name: /Contactores y Relevos Termicos · pág\. 3/ }).first()).toBeVisible();
+    await page.getByText(/Fuentes · \d+/).last().click();
+    const source = page.getByRole('link', { name: /Contactores y Relevos Termicos · pág\. 3/ }).last();
+    await expect(source).toBeVisible();
+    await expect(source).toHaveAttribute('href', /melectric\.com\.ar\/Content\/Catalogos\/.+#page=3/);
     await expect(page.getByText(/tensión de bobina/).first()).toBeVisible();
 });
 

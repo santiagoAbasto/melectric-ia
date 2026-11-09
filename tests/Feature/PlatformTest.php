@@ -78,7 +78,9 @@ it('atiende el chat web y oculta al cliente las sugerencias internas', function 
     $token = $this->postJson('/chat/start', ['name' => 'Juan', 'company' => 'Tableros SRL'])->assertOk()->json('token');
     $res = $this->postJson("/chat/{$token}/messages", ['body' => 'HL-C32/3-HX'])->assertOk()->json('messages');
     expect($res)->toHaveCount(2)->and($res[1]['sender'])->toBe('AI')->and($res[1]['citations'])->not->toBeEmpty()
-        ->and($res[1])->not->toHaveKey('rules');
+        ->and($res[1])->not->toHaveKey('rules')
+        ->and(collect($res[1]['citations'])->pluck('url')->filter()->all())->toBe([])
+        ->and($res[1]['citations'][0]['label'])->toBe('Catálogo de productos MElectric');
     $c = Conversation::query()->firstOrFail();
     Message::query()->create(['conversation_id' => $c->id, 'sender' => 'AI', 'type' => 'AI_SUGGESTION', 'body' => 'interno']);
     $all = $this->getJson("/chat/{$token}/messages")->json('messages');
