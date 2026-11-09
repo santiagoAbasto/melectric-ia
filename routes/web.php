@@ -41,6 +41,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/documents', [DocumentController::class, 'index'])->middleware('can:catalog.view')->name('documents');
     Route::post('/documents', [DocumentController::class, 'store'])->middleware('can:documents.upload')->name('documents.store');
+    Route::post('/documents/sync', [DocumentController::class, 'sync'])->middleware(['can:documents.upload', 'throttle:6,1'])->name('documents.sync');
+    Route::post('/documents/notes', [DocumentController::class, 'storeNote'])->middleware('can:documents.upload')->name('documents.notes');
     Route::get('/documents/{document}', [DocumentController::class, 'show'])->middleware('can:catalog.view')->name('documents.show');
     Route::get('/documents/{document}/file', [DocumentController::class, 'file'])->middleware('can:catalog.view')->name('documents.file');
     Route::post('/documents/{document}/reprocess', [DocumentController::class, 'reprocess'])->middleware('can:documents.upload')->name('documents.reprocess');

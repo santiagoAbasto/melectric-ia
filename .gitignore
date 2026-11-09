@@ -37,3 +37,7 @@ MEMORY.md
 PENDIENTE-SINCRONIZACION-MEMANTO.md
 # Catálogo público de MElectric/Eaton usado por una prueba: no se redistribuye en el repositorio
 /tests/Fixtures/contactores.pdf
+
+# Python
+__pycache__/
+*.pyc

@@ -202,13 +202,93 @@ final class DocumentIngestionService
     }
 
     /**
+     * Fuente de texto (nota interna, Word, TXT, Markdown, CSV, Excel) como documento consultable: página única,
+     * fragmentos y embeddings. Una nota con el mismo título reemplaza a la anterior (versión SUPERSEDED).
+     *
+     * @param  array{doc_type?:string, access_level?:string, original_name?:string, raw_path?:?string, mime?:string, uploaded_by?:?int, notes?:?string}  $meta
+     */
+    public function ingestText(string $title, string $text, array $meta = []): Document
+    {
+        $text = trim($text);
+        if (mb_strlen($text) < 20) {
+            throw new RuntimeException('El contenido es demasiado corto para incorporarlo a la base de conocimiento.');
+        }
+        $docType = $meta['doc_type'] ?? 'KNOWLEDGE_NOTE';
+        $sha = hash('sha256', $docType.'|'.$title.'|'.$text);
+        if ($existing = Document::query()->where('sha256', $sha)->first()) {
+            return $existing;
+        }
+        $family = Str::slug($docType.'-'.$title);
+        $current = Document::query()->where('family_key', $family)->where('status', 'CURRENT')->first();
+        $stored = $meta['raw_path'] ?? 'documents/text/'.$sha.'.txt';
+        if (! isset($meta['raw_path'])) {
+            Storage::disk('local')->put($stored, $text);
+        }
+        $source = Source::query()->firstOrCreate(['sha256' => $sha], ['kind' => $docType === 'KNOWLEDGE_NOTE' ? 'ADMIN_ENTRY' : 'FILE',
+            'access_level' => $meta['access_level'] ?? 'ADMIN_UPLOAD', 'name' => $meta['original_name'] ?? $title, 'authority' => 65, 'retrieved_at' => now()]);
+        $doc = Document::query()->create(['source_id' => $source->id, 'title' => $title, 'family_key' => $family, 'doc_type' => $docType, 'brand' => 'MElectric',
+            'path' => $stored, 'original_name' => $meta['original_name'] ?? $title.'.txt', 'mime' => $meta['mime'] ?? 'text/plain', 'size' => strlen($text),
+            'sha256' => $sha, 'pages' => 1, 'processing_status' => 'PROCESSING', 'uploaded_by' => $meta['uploaded_by'] ?? null, 'notes' => $meta['notes'] ?? null,
+            'processing_log' => [['step' => 'validated', 'status' => 'ok', 'detail' => number_format(mb_strlen($text), 0, ',', '.').' caracteres de texto', 'at' => now()->toIso8601String()]]]);
+        if ($current) {
+            app(DocumentPrecedenceService::class)->supersede($doc, $current);
+        }
+        DocumentPage::query()->create(['document_id' => $doc->id, 'page' => 1, 'text' => $text]);
+        $refs = 0;
+        foreach ($this->references->detect($text) as $hit) {
+            $refs++;
+            foreach (array_slice($hit['product_ids'], 0, 40) as $pid) {
+                DocumentProductLink::query()->create(['document_id' => $doc->id, 'product_id' => $pid, 'reference_raw' => mb_substr($hit['raw'], 0, 255),
+                    'page' => 1, 'link_method' => $hit['method'], 'confidence' => $hit['confidence']]);
+            }
+        }
+        $chunks = $this->chunk($doc, [1 => $text], []);
+        $embedded = $this->vectors->provider()->available() ? $this->vectors->index($chunks) : 0;
+        $log = $doc->processing_log;
+        $log[] = ['step' => 'chunks', 'status' => 'ok', 'detail' => count($chunks).' fragmentos · '.$refs.' referencias de producto', 'at' => now()->toIso8601String()];
+        $log[] = ['step' => 'embeddings', 'status' => $embedded ? 'ok' : 'warning', 'detail' => $embedded ? "{$embedded} vectores" : 'Proveedor de embeddings no disponible: sólo texto completo', 'at' => now()->toIso8601String()];
+        $doc->update(['processing_log' => $log, 'processing_status' => $embedded ? 'SUCCEEDED' : 'PARTIAL',
+            'stats' => ['pages' => 1, 'chunks' => count($chunks), 'embeddings' => $embedded, 'references' => $refs, 'tables' => 0, 'linked_products' => $refs]]);
+        AuditLog::record($docType === 'KNOWLEDGE_NOTE' ? 'knowledge.note_saved' : 'document.uploaded', $doc, null, ['title' => $title]);
+
+        return $doc->refresh();
+    }
+
+    /** Subida de cualquier fuente: PDF por su pipeline; Word/TXT/Markdown/CSV/Excel extrayendo el texto. */
+    public function ingestUpload(UploadedFile $file, array $meta = []): Document
+    {
+        $ext = strtolower($file->getClientOriginalExtension());
+        if ($ext === 'pdf') {
+            $doc = $this->register($file, $meta);
+
+            return $doc->processing_status === 'QUEUED' ? $this->process($doc) : $doc;
+        }
+        if ($file->getSize() > self::MAX_BYTES) {
+            throw new RuntimeException('El archivo supera 50 MB.');
+        }
+        $text = app(TextExtractor::class)->extract($file->getRealPath(), $ext);
+        $sha = hash_file('sha256', $file->getRealPath());
+        $raw = 'documents/files/'.$sha.'.'.$ext;
+        Storage::disk('local')->put($raw, file_get_contents($file->getRealPath()));
+        $title = $meta['title'] ?? trim(preg_replace('/[_\s]+/', ' ', pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?? '');
+
+        return $this->ingestText($title, $text, ['doc_type' => $meta['doc_type'] ?? 'MANUAL', 'access_level' => 'ADMIN_UPLOAD', 'original_name' => $file->getClientOriginalName(),
+            'raw_path' => $raw, 'mime' => (string) $file->getMimeType(), 'uploaded_by' => $meta['uploaded_by'] ?? null, 'notes' => $meta['notes'] ?? null]);
+    }
+
+    /**
      * Página pública del sitio como documento WEB_PAGE (texto + fragmentos + embeddings), deduplicada por hash del
      * texto visible. Devuelve new | updated | unchanged.
      */
     public function ingestWebPage(string $url, string $html): string
     {
-        $text = self::htmlToText($html);
-        $title = preg_match('/<title>(.*?)<\/title>/is', $html, $m) ? trim(html_entity_decode(strip_tags($m[1]))) : $url;
+        return $this->ingestWebText($url, self::htmlToText($html), $html);
+    }
+
+    /** Texto ya extraído de una página (lo usa el sincronizador Python). Devuelve new | updated | unchanged. */
+    public function ingestWebText(string $url, string $text, ?string $raw = null): string
+    {
+        $html = $raw ?? $text;
         $path = parse_url($url, PHP_URL_PATH) ?: '/';
         $title = 'Sitio MElectric — '.($path === '/' ? 'Inicio' : trim(str_replace(['/Home/', '/'], ['', ' '], $path)));
         $sha = hash('sha256', $text);
