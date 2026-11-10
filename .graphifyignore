@@ -16,3 +16,5 @@ cerebro/
 MEMORY.md
 package-lock.json
 composer.lock
+bootstrap/cache/
+PENDIENTE-SINCRONIZACION-MEMANTO.md
