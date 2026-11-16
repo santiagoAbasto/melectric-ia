@@ -18,13 +18,13 @@
 
 <img src="docs/readme/divider.svg" alt="" width="100%">
 
-## <a id="contenido"></a>📑 Contenido
+## <a id="contenido"></a><img src="docs/readme/ic-indice.svg" width="24" height="24" alt=""> Contenido
 
 [El problema](#el-problema) · [La solución](#la-solución) · [Funcionalidades](#funcionalidades) · [Arquitectura](#arquitectura) · [Flujos de trabajo](#flujos-de-trabajo) · [Modelo de datos](#modelo-de-datos) · [Criterios y decisiones](#criterios-y-decisiones) · [Stack](#stack) · [Estructura del repo](#estructura-del-repo) · [Puesta en marcha](#puesta-en-marcha) · [Pruebas y calidad](#pruebas-y-calidad) · [Despliegue](#despliegue) · [Estado y pendientes](#estado-y-pendientes) · [Licencia y autoría](#licencia-y-autoría)
 
 <img src="docs/readme/divider.svg" alt="" width="100%">
 
-## <a id="el-problema"></a>🧩 El problema
+## <a id="el-problema"></a><img src="docs/readme/ic-problema.svg" width="24" height="24" alt=""> El problema
 
 El catálogo técnico de MElectric (productos eléctricos B2B) vive repartido en tres fuentes: un Excel con la lista de productos, PDF de fichas técnicas y el sitio público. Los valores no siempre coinciden entre ellas. Un caso real documentado: el Excel indica 17 A en AC-3 para el DILM17 y el catálogo, en su página 3, indica 18 A.
 
@@ -34,7 +34,7 @@ Cuando un cliente pregunta por una referencia, un asistente que completa huecos 
 - **Compatibilidades no verificadas**: afirmar que un relé o accesorio sirve para un contactor solo porque una frase del catálogo lo menciona.
 - **Decisiones de cálculo**: kVAR, cortocircuito, selectividad o caída de tensión que requieren un ingeniero, no un chat.
 
-## <a id="la-solución"></a>💡 La solución
+## <a id="la-solución"></a><img src="docs/readme/ic-solucion.svg" width="24" height="24" alt=""> La solución
 
 MElectric IA es un monolito que ingiere las fuentes autorizadas con su procedencia, normaliza los datos a unidades canónicas y responde con un asistente que **solo afirma lo que tiene como evidencia**. Cuando no la tiene, se abstiene, pregunta o deriva a una persona.
 
@@ -47,7 +47,7 @@ Quién lo usa:
 
 Los permisos son de nueve roles con dieciséis permisos (`App\Enums\Role`), verificados en cada ruta con middleware `can:`.
 
-## <a id="funcionalidades"></a>✨ Funcionalidades
+## <a id="funcionalidades"></a><img src="docs/readme/ic-funcionalidades.svg" width="24" height="24" alt=""> Funcionalidades
 
 <details open>
 <summary><b>Chat del cliente</b></summary>
@@ -84,7 +84,7 @@ Los permisos son de nueve roles con dieciséis permisos (`App\Enums\Role`), veri
 Resumen de uso, playground con la misma tubería que el chat (con traza completa), prompts versionados (borrador, evaluación, publicación y vuelta atrás), reglas editables con umbral de confianza, trazas (`ai_runs`), evaluaciones con dataset dorado y costos por modelo.
 </details>
 
-## <a id="arquitectura"></a>🏗️ Arquitectura
+## <a id="arquitectura"></a><img src="docs/readme/ic-arquitectura.svg" width="24" height="24" alt=""> Arquitectura
 
 <p align="center">
   <img src="docs/readme/flujo.svg" alt="Cómo funciona: fuentes, normalización, búsqueda, orquestador y operador" width="100%">
@@ -114,7 +114,7 @@ Reglas que sostienen el diseño:
 - **Documentos y páginas son datos, no instrucciones.** Los fragmentos con instrucciones incrustadas se marcan y quedan fuera del contexto del modelo.
 - **Auditoría inmutable**: `audit_logs` no admite actualizaciones ni borrados.
 
-## <a id="flujos-de-trabajo"></a>🔄 Flujos de trabajo
+## <a id="flujos-de-trabajo"></a><img src="docs/readme/ic-flujos.svg" width="24" height="24" alt=""> Flujos de trabajo
 
 Consulta de un cliente, de punta a punta:
 
@@ -158,7 +158,7 @@ sequenceDiagram
 
 Los ciclos de vida de conversación y de documento, con el detalle de cada paso, están en `docs/architecture.md`.
 
-## <a id="modelo-de-datos"></a>🗃️ Modelo de datos
+## <a id="modelo-de-datos"></a><img src="docs/readme/ic-datos.svg" width="24" height="24" alt=""> Modelo de datos
 
 Entidades principales (de las migraciones y los modelos de `app/Models`):
 
@@ -187,7 +187,7 @@ erDiagram
 
 El detalle de índices y el ERD completo están en [`docs/database-erd.md`](docs/database-erd.md).
 
-## <a id="criterios-y-decisiones"></a>🧭 Criterios y decisiones
+## <a id="criterios-y-decisiones"></a><img src="docs/readme/ic-criterios.svg" width="24" height="24" alt=""> Criterios y decisiones
 
 | Decisión | Por qué |
 |---|---|
@@ -209,7 +209,7 @@ Reglas de negocio que no se ven en el código a simple vista:
 - Un documento nuevo que reemplaza a otro deja el anterior como `SUPERSEDED` y descarta sus especificaciones no verificadas. La fecha de subida no decide la vigencia.
 - Cuando dos fuentes dan valores distintos para el mismo campo, ambas especificaciones quedan `NEEDS_REVIEW` y el asistente muestra los dos valores con su fuente.
 
-## <a id="stack"></a>🧱 Stack
+## <a id="stack"></a><img src="docs/readme/ic-stack.svg" width="24" height="24" alt=""> Stack
 
 | Capa | Tecnología | Versión |
 |---|---|---|
@@ -230,7 +230,7 @@ Reglas de negocio que no se ven en el código a simple vista:
 | Sincronizador web | Python 3 (biblioteca estándar) | del sistema |
 | OCR | Framework Vision de macOS (binario Swift) | solo macOS |
 
-## <a id="estructura-del-repo"></a>🗂️ Estructura del repo
+## <a id="estructura-del-repo"></a><img src="docs/readme/ic-estructura.svg" width="24" height="24" alt=""> Estructura del repo
 
 ```text
 app/
@@ -252,7 +252,7 @@ docs/                arquitectura, ERD, seguridad, pruebas, despliegue, fuentes 
 tests/               Pest (Feature, Unit, AI) · Playwright (e2e)
 ```
 
-## <a id="puesta-en-marcha"></a>🚀 Puesta en marcha
+## <a id="puesta-en-marcha"></a><img src="docs/readme/ic-arranque.svg" width="24" height="24" alt=""> Puesta en marcha
 
 Requisitos: PHP 8.3 o superior, Composer 2, Node 22 o superior, MySQL 8, `poppler-utils` para los PDF y, para la identificación por foto en local, macOS con Xcode (para compilar el OCR).
 
@@ -295,7 +295,7 @@ Comandos útiles:
 | `php artisan melectric:sync-web [--base=URL]` | Sincroniza el sitio con el script de Python |
 | `php artisan melectric:eval [--llm]` | Dataset dorado del asistente con métricas de abstención |
 
-## <a id="pruebas-y-calidad"></a>🧪 Pruebas y calidad
+## <a id="pruebas-y-calidad"></a><img src="docs/readme/ic-pruebas.svg" width="24" height="24" alt=""> Pruebas y calidad
 
 | Capa | Comando | Qué cubre |
 |---|---|---|
@@ -311,7 +311,7 @@ Las pruebas usan SQLite en memoria y proveedores `fake` (forzado en `phpunit.xml
 
 Las métricas del dataset dorado son: `pass_rate`, `correct_answer_rate`, `false_answer_rate`, `correct_abstention_rate`, `unnecessary_abstention_rate` y `false_confident_technical` (respuesta técnica fallida con confianza igual o mayor a 0,8, la más peligrosa). El dataset lo escribió el mismo equipo que hizo el sistema: sirve como regresión, no como medición independiente. Conviene sumar casos reales de la bandeja.
 
-## <a id="despliegue"></a>🚢 Despliegue
+## <a id="despliegue"></a><img src="docs/readme/ic-despliegue.svg" width="24" height="24" alt=""> Despliegue
 
 No hay Dockerfile ni workflow de despliegue en el repositorio; el despliegue está documentado en [`docs/deployment.md`](docs/deployment.md) como pasos manuales:
 
@@ -331,7 +331,7 @@ php artisan config:cache route:cache view:cache
 - Salud: `/up` del framework. Pendiente según la documentación: un endpoint autorizado que revise base de datos, almacenamiento, proveedor de IA y embeddings.
 - Modos de falla: sin LLM responde con el borrador determinista; sin embeddings usa texto completo; si el crawler cae, los datos guardados no se tocan.
 
-## <a id="estado-y-pendientes"></a>📌 Estado y pendientes
+## <a id="estado-y-pendientes"></a><img src="docs/readme/ic-estado.svg" width="24" height="24" alt=""> Estado y pendientes
 
 Último commit en la rama local: **2026-11-09** (`0307bb8`). No hay evidencia en el repo de un despliegue productivo: **no verificado**.
 
@@ -344,7 +344,7 @@ Bloqueos reales documentados al 2026-11-09:
 
 Pendientes documentados: `EngineeringCalculationService` con metodología aprobada, endpoint de salud autorizado y casos reales para el dataset de evaluación. El estado detallado está en la sección «Estado» de `docs/architecture.md`.
 
-## <a id="licencia-y-autoría"></a>📄 Licencia y autoría
+## <a id="licencia-y-autoría"></a><img src="docs/readme/ic-licencia.svg" width="24" height="24" alt=""> Licencia y autoría
 
 Desarrollado por el **Ing. Santiago Abasto**.
 
