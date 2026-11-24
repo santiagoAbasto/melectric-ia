@@ -60,6 +60,7 @@ export interface EvalRun { id: number; dataset: string; prompt_version_id: numbe
 export interface AiPageProps {
     tab: string; overview: Overview; costs: Costs; providers: Provider[]; default_provider: string | null;
     profiles: Profile[]; prompts: PromptDef[]; rules: Rule[]; tools: ToolDef[]; traces: TraceRow[]; evals: EvalRun[];
+    behavior: { instructions: string };
 }
 
 /* ───────── Respuesta JSON de POST /ai/playground ───────── */

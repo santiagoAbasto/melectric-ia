@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { Tabs } from '@/components/ui';
 import type { AiPageProps } from './parts/common';
+import { Behavior } from './parts/Behavior';
 import { Evals } from './parts/Evals';
 import { CostsPanel, Overview, Profiles, Rules, Tools, Traces } from './parts/Panels';
 import { Playground } from './parts/Playground';
@@ -11,8 +12,9 @@ import { Prompts } from './parts/Prompts';
 
 const TABS = [
     { key: 'overview', label: 'Resumen' },
+    { key: 'comportamiento', label: 'Comportamiento' },
     { key: 'playground', label: 'Playground' },
-    { key: 'prompts', label: 'Prompts' },
+    { key: 'prompts', label: 'Avanzado' },
     { key: 'rules', label: 'Reglas' },
     { key: 'profiles', label: 'Perfiles' },
     { key: 'tools', label: 'Herramientas' },
@@ -40,6 +42,7 @@ export default function AiIndex(props: AiPageProps) {
                 <Tabs tabs={TABS} active={tab} onChange={go} />
                 <div role="tabpanel" aria-label={TABS.find((t) => t.key === tab)?.label}>
                     {tab === 'overview' && <Overview o={props.overview} providers={props.providers} defaultProvider={props.default_provider} />}
+                    {tab === 'comportamiento' && <Behavior instructions={props.behavior.instructions} />}
                     {/* Montado siempre: el resultado de la prueba sobrevive al cambio de pestaña. */}
                     <div hidden={tab !== 'playground'}>
                         <Playground profiles={props.profiles} providers={props.providers} defaultProvider={props.default_provider} prompts={props.prompts} rules={props.rules} />

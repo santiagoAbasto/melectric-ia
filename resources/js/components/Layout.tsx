@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { BookOpenCheck, Boxes, Cpu, FileText, LogOut, Menu, MessageCircle, Search, SearchCode, X } from 'lucide-react';
+import { BookOpenCheck, Boxes, Building2, Cpu, FileText, LogOut, Menu, MessageCircle, Search, SearchCode, X } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 import type { Permission, SharedProps } from '@/types';
 import { CommandPalette } from './CommandPalette';
@@ -12,6 +12,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     {
         title: 'Catálogo y conocimiento',
         items: [
+            { href: '/empresa', label: 'Sobre la empresa', icon: Building2, can: 'catalog.view' },
             { href: '/products', label: 'Productos', icon: Boxes, can: 'catalog.view' },
             { href: '/documents', label: 'Documentos', icon: FileText, can: 'catalog.view' },
             { href: '/knowledge', label: 'Conocimiento', icon: BookOpenCheck, can: 'catalog.view' },

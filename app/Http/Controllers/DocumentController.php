@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Documents\DocumentIngestionService;
+use App\Models\AuditLog;
 use App\Models\Document;
 use App\Models\DocumentProductLink;
 use App\Models\SyncRun;
@@ -67,14 +68,45 @@ class DocumentController extends Controller
     /** Nota de la base de conocimiento (garantías, horarios, políticas, respuestas aprobadas…). */
     public function storeNote(Request $request, DocumentIngestionService $service): RedirectResponse
     {
-        $data = $request->validate(['title' => ['required', 'string', 'max:160'], 'body' => ['required', 'string', 'min:20', 'max:20000']]);
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:160'], 'body' => ['required', 'string', 'min:20', 'max:20000'],
+            'redirect' => ['nullable', 'in:company,show'],
+        ]);
         try {
             $doc = $service->ingestText($data['title'], $data['body'], ['doc_type' => 'KNOWLEDGE_NOTE', 'uploaded_by' => $request->user()->id]);
         } catch (\RuntimeException $e) {
             return back()->withErrors(['body' => $e->getMessage()]);
         }
+        if (($data['redirect'] ?? null) === 'company') {
+            return redirect()->route('company')->with('message', 'Listo. La IA ya está usando «'.$doc->title.'».');
+        }
 
         return redirect()->route('documents.show', $doc)->with('message', 'Nota guardada en la base de conocimiento.');
+    }
+
+    /** Pantalla simple «Sobre la empresa»: lo que un administrador no técnico le enseña a la IA. */
+    public function company(): Response
+    {
+        $notes = Document::query()->where('doc_type', 'KNOWLEDGE_NOTE')->where('status', 'CURRENT')
+            ->with('pagesText')->orderBy('title')->get()->map(fn (Document $d) => [
+                'id' => $d->id,
+                'title' => $d->title,
+                'body' => (string) ($d->pagesText->firstWhere('page', 1)?->text ?? ''),
+                'updated_at' => $d->updated_at?->toIso8601String(),
+                'embedded' => (int) ($d->stats['embeddings'] ?? 0) > 0,
+            ])->values();
+
+        return inertia('Company/Index', ['notes' => $notes]);
+    }
+
+    /** Quitar un tema: borra la nota y sus fragmentos (la IA deja de usarla). */
+    public function destroyNote(Document $document): RedirectResponse
+    {
+        abort_unless($document->doc_type === 'KNOWLEDGE_NOTE', 422, 'Sólo se pueden quitar notas de conocimiento.');
+        AuditLog::record('knowledge.note_removed', $document, null, ['title' => $document->title]);
+        $document->delete();
+
+        return back()->with('message', 'Tema quitado. La IA deja de usarlo.');
     }
 
     public function show(Document $document): Response

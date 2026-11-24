@@ -27,6 +27,9 @@ use Inertia\Response;
 
 class AiControlController extends Controller
 {
+    /** Separa, dentro de la política del asistente, las instrucciones de la empresa (editables) de las reglas fijas. */
+    public const COMPANY_MARK = '=== INSTRUCCIONES DE LA EMPRESA (se edita en «Comportamiento») ===';
+
     public function index(Request $request, ProviderManager $providers, EmbeddingProviderInterface $embeddings): Response
     {
         $since = fn (int $days) => AiRun::query()->where('created_at', '>=', now()->subDays($days));
@@ -61,7 +64,17 @@ class AiControlController extends Controller
             'traces' => AiRun::query()->latest('id')->limit(40)->get(['id', 'trace_id', 'origin', 'profile_key', 'intent', 'outcome', 'confidence', 'provider', 'model', 'llm_used', 'llm_rejected',
                 'input', 'latency_ms', 'cost_usd', 'input_tokens', 'output_tokens', 'rules_fired', 'tool_calls', 'status', 'error', 'prompt_version_id', 'created_at']),
             'evals' => EvalRun::query()->latest('id')->limit(10)->get(),
+            'behavior' => ['instructions' => $this->companyInstructions()],
         ]);
+    }
+
+    /** Texto libre que la empresa agregó a la política del asistente (lo que edita la pantalla «Comportamiento»). */
+    private function companyInstructions(): string
+    {
+        $body = (string) (app(PromptRegistry::class)->published('assistant_policy')?->body ?? '');
+        $pos = mb_strpos($body, self::COMPANY_MARK);
+
+        return $pos === false ? '' : trim(mb_substr($body, $pos + mb_strlen(self::COMPANY_MARK)));
     }
 
     /** Playground (spec §110): misma tubería que el chat, con perfil/proveedor/versión de prompt elegibles y la traza completa. */
@@ -96,6 +109,30 @@ class AiControlController extends Controller
         AuditLog::record('ai.prompt_published', $version, $before, ['id' => $version->id, 'version' => $version->version]);
 
         return back()->with('message', "Versión v{$version->version} publicada.");
+    }
+
+    /** «Comportamiento»: guarda en lenguaje simple las instrucciones de la empresa y publica la política, sin tocar las reglas de seguridad. */
+    public function saveBehavior(Request $request, PromptRegistry $registry): RedirectResponse
+    {
+        $data = $request->validate(['instructions' => ['nullable', 'string', 'max:8000']]);
+        $published = $registry->published('assistant_policy');
+        if (! $published) {
+            return back()->with('error', 'No hay una política del asistente publicada.');
+        }
+        $pos = mb_strpos($published->body, self::COMPANY_MARK);
+        $base = rtrim($pos === false ? $published->body : mb_substr($published->body, 0, $pos));
+        $instr = trim((string) ($data['instructions'] ?? ''));
+        $newBody = $instr === '' ? $base : $base."\n\n".self::COMPANY_MARK."\n".$instr;
+        if (trim($newBody) === trim($published->body)) {
+            return back()->with('message', 'No hubo cambios.');
+        }
+        $def = $published->definition;
+        $version = $def->versions()->create(['version' => (int) $def->versions()->max('version') + 1, 'status' => 'DRAFT',
+            'body' => $newBody, 'change_note' => 'Instrucciones de la empresa (Comportamiento)', 'created_by' => $request->user()->id]);
+        DB::transaction(fn () => $registry->publish($version));
+        AuditLog::record('ai.behavior_saved', $version, null, ['version' => $version->version]);
+
+        return back()->with('message', 'Listo. El asistente ya tiene en cuenta estas instrucciones.');
     }
 
     public function updateRule(AiRule $rule, Request $request): RedirectResponse

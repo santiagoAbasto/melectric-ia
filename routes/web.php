@@ -43,6 +43,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/documents', [DocumentController::class, 'store'])->middleware('can:documents.upload')->name('documents.store');
     Route::post('/documents/sync', [DocumentController::class, 'sync'])->middleware(['can:documents.upload', 'throttle:6,1'])->name('documents.sync');
     Route::post('/documents/notes', [DocumentController::class, 'storeNote'])->middleware('can:documents.upload')->name('documents.notes');
+    Route::get('/empresa', [DocumentController::class, 'company'])->middleware('can:catalog.view')->name('company');
+    Route::delete('/documents/notes/{document}', [DocumentController::class, 'destroyNote'])->middleware('can:documents.upload')->name('documents.notes.destroy');
     Route::get('/documents/{document}', [DocumentController::class, 'show'])->middleware('can:catalog.view')->name('documents.show');
     Route::get('/documents/{document}/file', [DocumentController::class, 'file'])->middleware('can:catalog.view')->name('documents.file');
     Route::post('/documents/{document}/reprocess', [DocumentController::class, 'reprocess'])->middleware('can:documents.upload')->name('documents.reprocess');
@@ -55,6 +57,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/ai', [AiControlController::class, 'index'])->middleware('can:ai.evals.run')->name('ai');
     Route::post('/ai/playground', [AiControlController::class, 'playground'])->middleware('can:ai.evals.run')->name('ai.playground');
+    Route::post('/ai/behavior', [AiControlController::class, 'saveBehavior'])->middleware('can:ai.prompts.manage')->name('ai.behavior');
     Route::post('/ai/prompts/{definition}', [AiControlController::class, 'saveDraft'])->middleware('can:ai.prompts.manage')->name('ai.prompts.draft');
     Route::post('/ai/prompts/versions/{version}/publish', [AiControlController::class, 'publish'])->middleware('can:ai.prompts.manage')->name('ai.prompts.publish');
     Route::post('/ai/rules/{rule}', [AiControlController::class, 'updateRule'])->middleware('can:ai.rules.manage')->name('ai.rules.update');

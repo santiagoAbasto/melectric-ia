@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { ArrowDown, ArrowLeft, Bot, CheckCheck, Hand, Info, MessageSquareDashed, Search, Send, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Bot, CheckCheck, Hand, Info, MessageSquareDashed, MessageSquareText, Search, Send, X } from 'lucide-react';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { Avatar, ChatThread, Fichas, timeOf } from '@/components/MessageView';
@@ -279,6 +279,7 @@ export default function InboxIndex({ conversations, filters, filter, q, conversa
                     )}
                     <div className="flex items-end gap-2">
                         <IconBtn label="Generar respuesta con IA (A)" onClick={() => post(`/inbox/${conversation.id}/suggest`)} disabled={busy}><Bot size={20} /></IconBtn>
+                        <QuickReplies onPick={(t) => { setBody((b) => (b.trim() ? `${b} ${t}` : t)); composer.current?.focus(); }} />
                         <div className="flex min-h-[42px] flex-1 items-center rounded-lg bg-surface px-3 shadow-[var(--shadow-bubble)] focus-within:ring-2 focus-within:ring-brand/25">
                             <textarea ref={composer} rows={1} aria-label="Respuesta" value={body} onChange={(e) => setBody(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
@@ -333,6 +334,54 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
         <div className="flex items-baseline justify-between gap-3 text-[13px]">
             <span className="shrink-0 text-chat-meta">{label}</span>
             <span className="min-w-0 text-right">{value}</span>
+        </div>
+    );
+}
+
+const DEFAULT_TEMPLATES = [
+    'Gracias por tu consulta. ¿Me pasás la referencia exacta o una foto de la etiqueta?',
+    'Te derivo con el equipo comercial para el precio y la disponibilidad.',
+    'Ese producto está discontinuado; te paso el reemplazo equivalente.',
+    'Estoy consultando con el proveedor y te confirmo a la brevedad.',
+    '¿Me confirmás la tensión y la corriente del equipo?',
+    'Esa línea de productos no la manejamos.',
+];
+const TEMPLATES_KEY = 'melectric_quick_replies';
+
+/** Respuestas rápidas: frases típicas que el operador inserta en el mensaje. Las propias se guardan en este navegador. */
+function QuickReplies({ onPick }: { onPick: (text: string) => void }) {
+    const [open, setOpen] = useState(false);
+    const [custom, setCustom] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY) || '[]'); } catch { return []; } });
+    const [draft, setDraft] = useState('');
+    const save = (list: string[]) => { setCustom(list); try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list)); } catch { /* sin almacenamiento */ } };
+
+    return (
+        <div className="relative">
+            <IconBtn label="Respuestas rápidas" active={open} onClick={() => setOpen((v) => !v)}><MessageSquareText size={20} /></IconBtn>
+            {open && (
+                <>
+                    <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
+                    <div className="absolute bottom-12 left-0 z-20 w-80 max-w-[82vw] rounded-xl border border-line bg-surface p-2 shadow-pop" role="menu" aria-label="Respuestas rápidas">
+                        <div className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-subtle">Respuestas rápidas</div>
+                        <ul className="scrollbar-thin max-h-64 space-y-0.5 overflow-y-auto">
+                            {DEFAULT_TEMPLATES.map((t) => (
+                                <li key={t}><button type="button" role="menuitem" onClick={() => { onPick(t); setOpen(false); }} className="w-full rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-chat-panel">{t}</button></li>
+                            ))}
+                            {custom.map((t, i) => (
+                                <li key={`c${i}`} className="group flex items-start gap-1">
+                                    <button type="button" role="menuitem" onClick={() => { onPick(t); setOpen(false); }} className="flex-1 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-chat-panel">{t}</button>
+                                    <button type="button" aria-label="Quitar respuesta rápida" onClick={() => save(custom.filter((_, j) => j !== i))} className="mt-1.5 shrink-0 rounded p-1 text-chat-meta opacity-0 hover:bg-black/[0.05] group-hover:opacity-100"><X size={13} /></button>
+                                </li>
+                            ))}
+                        </ul>
+                        <form className="mt-1 flex gap-1 border-t border-line pt-1.5" onSubmit={(e) => { e.preventDefault(); const v = draft.trim(); if (v) { save([...custom, v]); setDraft(''); } }}>
+                            <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={500} aria-label="Nueva respuesta rápida"
+                                placeholder="Agregar una propia…" className="h-8 flex-1 rounded-md bg-chat-panel px-2 text-[12.5px] outline-none placeholder:text-chat-meta" />
+                            <button type="submit" disabled={!draft.trim()} className="rounded-md bg-brand px-2.5 text-[12.5px] font-medium text-white disabled:opacity-40">Agregar</button>
+                        </form>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

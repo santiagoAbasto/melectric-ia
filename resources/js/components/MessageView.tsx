@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { AlertTriangle, BookOpen, Check, ChevronDown, ShieldCheck, Wrench } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, CheckCheck, ChevronDown, ShieldCheck, Wrench } from 'lucide-react';
 import { Fragment, type ReactNode, useState } from 'react';
 import type { ChatMessage, Citation, ProductCard } from '@/types';
 import { cx, STATUS_LABELS } from './ui';
@@ -186,13 +186,15 @@ interface BubbleProps {
     internal?: boolean;
     customerSide?: boolean;
     tail?: boolean;
+    /** Mensaje propio ya respondido por la otra parte: muestra doble tilde (como «leído»). */
+    delivered?: boolean;
     /** `sendNow`: la opción se envía tal cual; si no, se precarga en el campo de escritura. */
     onQuickReply?: (text: string, sendNow: boolean) => void;
     actions?: ReactNode;
 }
 
 /** Burbuja de mensaje: texto, fichas, tabla técnica, fuentes, hora y estado. */
-export function MessageView({ message, internal = false, customerSide = false, tail = true, onQuickReply, actions }: BubbleProps) {
+export function MessageView({ message, internal = false, customerSide = false, tail = true, delivered = false, onQuickReply, actions }: BubbleProps) {
     const fromCustomer = message.sender === 'CUSTOMER';
     const suggestion = message.type === 'AI_SUGGESTION';
     const outgoing = customerSide ? fromCustomer : !fromCustomer;
@@ -201,7 +203,11 @@ export function MessageView({ message, internal = false, customerSide = false, t
         <span className={cx('inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-chat-meta', !rich && 'float-right ml-3 mt-1.5 translate-y-1')}>
             {internal && message.confidence != null && !suggestion && <span title="Confianza calculada por el sistema" className="mono">{Math.round(message.confidence * 100)}%</span>}
             {timeOf(message.at)}
-            {outgoing && <Check size={13} className="text-brand/70" aria-label="Enviado" />}
+            {outgoing && (message.id < 0
+                ? <Check size={13} className="text-chat-meta/50" aria-label="Enviando" />
+                : delivered
+                    ? <CheckCheck size={14} className="text-[#34b7f1]" aria-label="Respondido" />
+                    : <Check size={13} className="text-chat-meta/70" aria-label="Enviado" />)}
         </span>
     );
     const label = suggestion ? null : message.sender === 'AI' && !customerSide ? 'Asistente' : message.sender === 'HUMAN' ? (customerSide ? 'Equipo MElectric' : (message.user ?? 'Operador')) : null;
@@ -282,6 +288,9 @@ export function ChatThread({ messages, internal = false, customerSide = false, o
                 lastDay = day;
                 const sameGroup = !newDay && prev && prev.sender === m.sender && prev.type !== 'AI_SUGGESTION' && m.type !== 'AI_SUGGESTION'
                     && Math.abs(new Date(m.at ?? 0).getTime() - new Date(prev.at ?? 0).getTime()) < 5 * 60_000;
+                // «Respondido» (doble tilde): mi mensaje ya confirmado y con una respuesta posterior de la otra parte.
+                const own = customerSide ? m.sender === 'CUSTOMER' : m.sender !== 'CUSTOMER';
+                const delivered = own && m.id > 0 && messages.slice(i + 1).some((x) => (customerSide ? x.sender !== 'CUSTOMER' : x.sender === 'CUSTOMER'));
                 return (
                     <div key={m.id} className={cx(!sameGroup && i > 0 && 'pt-2')}>
                         {newDay && day && (
@@ -289,7 +298,7 @@ export function ChatThread({ messages, internal = false, customerSide = false, o
                                 <span className="rounded-md bg-white/95 px-2.5 py-1 text-[11.5px] font-medium text-chat-meta shadow-[var(--shadow-bubble)]">{day}</span>
                             </div>
                         )}
-                        <MessageView message={m} internal={internal} customerSide={customerSide} tail={!sameGroup}
+                        <MessageView message={m} internal={internal} customerSide={customerSide} tail={!sameGroup} delivered={delivered}
                             onQuickReply={i === messages.length - 1 && m.sender !== 'CUSTOMER' ? onQuickReply : undefined} actions={renderActions?.(m)} />
                     </div>
                 );
