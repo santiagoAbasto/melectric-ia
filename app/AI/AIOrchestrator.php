@@ -44,6 +44,17 @@ final class AIOrchestrator
         'control_signaling' => 'elemento de mando y señalización', 'switch_generic' => 'interruptor o protección',
     ];
 
+    /** Etiquetas en palabras simples para el texto que ve el cliente: sin símbolos de ingeniería (In, Ie, IΔn, Un). */
+    private const CHAT_LABELS = [
+        'rated_current' => 'Corriente',
+        'rated_current_ac3' => 'Corriente para motor',
+        'rated_current_ac1' => 'Corriente para carga general',
+        'rated_voltage' => 'Tensión',
+        'sensitivity' => 'Sensibilidad',
+        'breaking_capacity' => 'Poder de corte',
+        'utilization_category' => 'Uso',
+    ];
+
     private CitationService $cit;
 
     public function __construct(
@@ -268,7 +279,7 @@ final class AIOrchestrator
         }
 
         return ['text' => $prefix.'No tengo acceso al '.implode(' ni al ', $what).' actualizado: no hay una fuente comercial autorizada conectada. '
-            .'Te derivo con el equipo comercial para que te coticen.', 'outcome' => 'HANDOFF', 'handoff' => 'SALES',
+            .'Te derivo con el equipo comercial (BtoB) para que te pasen precio y disponibilidad.', 'outcome' => 'HANDOFF', 'handoff' => 'SALES',
             'reason' => 'Consulta de '.implode(' y ', $what), 'products' => $products, 'confidence_override' => 1.0, 'override_reason' => 'derivación por regla', 'intent' => 'COMMERCIAL'];
     }
 
@@ -333,7 +344,22 @@ final class AIOrchestrator
                 .'confirmarte una alternativa de forma segura. ¿Querés que lo consulte el equipo técnico?', 'outcome' => 'ABSTAINED', 'signals' => ['strategy' => 'none']];
         }
 
+        // Equivalencia con otra marca sin match en el catálogo: no se inventa ni se responde con documentación suelta.
+        if ($this->looksLikeBrandEquivalence($q)) {
+            $this->rules->fire('NO_EVIDENCE_ABSTAIN');
+
+            return $base + ['text' => 'No tengo en el catálogo de MElectric un equivalente confirmado para ese producto de otra marca. '
+                .'No te invento una equivalencia: si me pasás la referencia exacta de Eaton o MElectric, o una foto de la etiqueta, la busco; '
+                .'si no, lo ve una persona del equipo técnico.', 'outcome' => 'ABSTAINED', 'signals' => ['strategy' => 'none']];
+        }
+
         return ['technical' => (bool) $q->productType] + $this->fromKnowledge($q) + $base;
+    }
+
+    /** La consulta menciona una marca que MElectric no vende (pide equivalencia/reemplazo de otra marca). */
+    private function looksLikeBrandEquivalence(ParsedQuery $q): bool
+    {
+        return (bool) preg_match('/\b(abb|siemens|schneider|telemecanique|weg|legrand|chint|lovato|mitsubishi|allen[\s-]?bradley|general\s+electric)\b/iu', $q->raw);
     }
 
     private function describeReference(SearchResult $r, ParsedQuery $q): array
@@ -635,7 +661,7 @@ final class AIOrchestrator
         foreach ($keys as $key) {
             $s = $p->specifications->where('status', '!=', 'REJECTED')->filter(fn ($s) => $s->definition->key === $key)->sortByDesc(fn ($s) => [$s->document_id ? 1 : 0, $s->confidence])->first();
             if ($s) {
-                $label = SpecCatalog::DEFINITIONS[$key][0] ?? $key;
+                $label = self::CHAT_LABELS[$key] ?? SpecCatalog::DEFINITIONS[$key][0] ?? $key;
                 $parts[] = $label.' '.UnitService::display($s).($s->qualifier && in_array($key, ['motor_power', 'rated_current_ac3', 'coil_voltage'], true) ? ' ('.$s->qualifier.')' : '').' ['.$this->cit->forSpec($s).']';
             }
         }
@@ -650,8 +676,8 @@ final class AIOrchestrator
             ->sortByDesc(fn ($s) => [$s->document_id ? 1 : 0, $s->confidence])->first();
         $parts = [];
         $cites = [];
-        $ac3At = str_contains((string) $get('rated_current_ac3')?->qualifier, '380') ? ' (380-400 V)' : '';
-        foreach (['motor_power' => '%s', 'rated_current_ac3' => '%s en AC-3'.$ac3At, 'rated_current_ac1' => '%s en AC-1'] as $key => $fmt) {
+        $ac3At = str_contains((string) $get('rated_current_ac3')?->qualifier, '380') ? ', 380-400 V' : '';
+        foreach (['motor_power' => '%s', 'rated_current_ac3' => '%s para el motor (AC-3'.$ac3At.')', 'rated_current_ac1' => '%s para carga general (AC-1)'] as $key => $fmt) {
             if ($s = $get($key)) {
                 $parts[] = sprintf($fmt, UnitService::display($s));
                 $cites[$this->cit->forSpec($s)] = true;
