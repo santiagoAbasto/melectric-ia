@@ -92,8 +92,10 @@ con instrucciones incrustadas (`PROMPT_INJECTION_FLAGGED`) y los excluye del con
 
 ## Orquestador y LLM
 
-Flujos por intención: persona, saludo, cálculo/proyecto (siempre a ingeniería), precio/stock (siempre a ventas),
-comparación, compatibilidad, documentos, variadores (sólo evidencia documental), selección. Cada flujo arma un borrador
+Flujos por intención: persona, saludo, cálculo/proyecto (siempre a ingeniería), precio/stock (siempre a ventas, BtoB),
+comparación, compatibilidad, documentos, variadores (sólo evidencia documental), selección. Las equivalencias con otras
+marcas (ABB, Siemens, Schneider, Weg…) sólo se ofrecen si hay un producto en el catálogo que las respalde; sin coincidencia,
+el asistente se abstiene y deriva (`looksLikeBrandEquivalence`) en lugar de responder con documentación suelta. Cada flujo arma un borrador
 determinista con citas `[n]` a fila del Excel o página del PDF. El `ModelRouter` decide: sin LLM para referencias exactas,
 preguntas, abstenciones y derivaciones; modelo rápido para selecciones; modelo de razonamiento para comparaciones y
 documentos. El LLM sólo reescribe; `NumericGroundingGuard` descarta su texto si aparece un número que no está en la
@@ -113,7 +115,9 @@ Opus/Sonnet), `ollama` (local, sin salida de datos) y `fake` (sólo pruebas, blo
 
 Resumen, playground (misma tubería que el chat, con traza completa), prompts versionados (borrador → evaluación →
 publicación → vuelta atrás; nunca se sobrescribe), reglas (umbral editable; las de seguridad no se apagan), perfiles,
-herramientas, trazas (`ai_runs`), evaluaciones (dataset dorado) y costos por modelo, perfil y origen.
+herramientas, trazas (`ai_runs`), evaluaciones (dataset dorado) y costos por modelo, perfil y origen. La bandeja del
+operador suma respuestas rápidas (plantillas, propias por navegador) y el chat del cliente muestra tildes de entrega
+(✓ enviado · ✓✓ respondido).
 
 ## Ingeniería
 
@@ -145,8 +149,17 @@ siempre `assistant_policy + answer_writer`. Además, el texto que ve el cliente 
 (`AI_WRITER_PROVIDERS`, por defecto `anthropic`): el 2026-11-09 el modelo local cambió el sentido de una pregunta («tensión
 de bobina» → «cuántas bobinas») sin romper la guardia numérica, así que Ollama queda sólo para el playground.
 
+Para un administrador no técnico, Centro de IA → **Comportamiento** muestra en lenguaje simple qué responde y qué deriva,
+con las reglas de seguridad bloqueadas, y permite sumar «instrucciones de la empresa» (`POST /ai/behavior`): texto libre que
+se agrega a `assistant_policy` después de una marca y se publica, sin tocar las reglas fijas. El editor crudo del prompt
+(versiones, comparaciones) queda en la pestaña **Avanzado**.
+
 ## Base de conocimiento
 
+- **Sobre la empresa** (`/empresa`): pantalla simple para que un administrador no técnico le enseñe a la IA, en palabras
+  normales, lo que es la empresa (quiénes son, garantías, envíos, formas de pago, preguntas frecuentes). Alta y edición
+  con temas sugeridos; cada tema se guarda como nota de conocimiento y queda «en uso»; quitarlo borra la nota y sus
+  fragmentos (`DELETE /documents/notes/{document}`), con lo que la IA deja de usarlo.
 - **Notas** (Documentos → Nota de conocimiento, `POST /documents/notes`): información interna aprobada (garantías,
   plazos, políticas, respuestas tipo). Se citan como «MElectric · <título>». Una nota con el mismo título reemplaza a la
   anterior (la vieja queda SUPERSEDED y deja de citarse).

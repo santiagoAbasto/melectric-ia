@@ -18,3 +18,5 @@ package-lock.json
 composer.lock
 bootstrap/cache/
 PENDIENTE-SINCRONIZACION-MEMANTO.md
+*.svg
+docs/readme/
